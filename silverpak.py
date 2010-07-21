@@ -457,101 +457,34 @@ class SilverpakManager
                 GenerateCommand(Commands.SetAcceleration, m_acceleration) + \
                 GenerateCommand(Commands.SetEncoderRatio, m_encoderRatio)
 
-    def invokeErrorCallback(ex)
+    def invokeErrorCallback(ex):
         """Invokes the ErrorCalback delegate if it has been set. Otherwise, re-throws the exception so that the program crashes."""
         if s_errorCallback != None:
             s_errorCallback.Invoke(ex)
         else:
             raise ex
 
-#  The exception that is thrown when a method call in namespace Silverpak23CE is invalid for the object's current state. 
-Public Class InvalidSilverpakOperationException
-    Inherits InvalidOperationException
-    Public Sub New()
-        MyBase.New()
-    End Sub
-    Public Sub New(ByVal message As String)
-        MyBase.New(message)
-    End Sub
-    Public Sub New(ByVal message As String, ByVal innerException As Exception)
-        MyBase.New(message, innerException)
-    End Sub
-    Protected Sub New(ByVal info As Runtime.Serialization.SerializationInfo, ByVal context As Runtime.Serialization.StreamingContext)
-        MyBase.New(info, context)
-    End Sub
-End Class
+class InvalidSilverpakOperationException(Exception):
+    """The exception that is thrown when a method call in namespace Silverpak23CE is invalid for the object's current state."""
 
-Represents a collection of data for reporting the status of a COM port
-Public Class PortInformation
-    The name of the COM port
-    Public Property PortName() As String
-        Get
-            return m_portName
-        End Get
-        Set(ByVal value As String)
-            m_portName = value
-        End Set
-    End Property
-    The baud rate of the COM port
-    Public Property BaudRate() As Integer
-        Get
-            return m_baudRate
-        End Get
-        Set(ByVal value As Integer)
-            m_baudRate = value
-        End Set
-    End Property
-    The status of the COM port
-    Public Property PortStatus() As PortStatuses
-        Get
-            return m_portStatus
-        End Get
-        Set(ByVal value As PortStatuses)
-            m_portStatus = value
-        End Set
-    End Property
-    The driver address of the active Silverpak23CE if there is one
-    Public Property DriverAddress() As DriverAddresses
-        Get
-            return m_driverAddress
-        End Get
-        Set(ByVal value As DriverAddresses)
-            m_driverAddress = value
-        End Set
-    End Property
 
-    # Field behind the PortName property
-    Private m_portName As String
-    # Field behind the BaudRate property
-    Private m_baudRate As Integer
-    # Field behind the PortStatu property
-    Private m_portStatus As PortStatuses
-    # Field behind the DriverAddress property
-    Private m_driverAddress As DriverAddresses
-End Class
+class PortInformation:
+    """Represents a collection of data for reporting the status of a COM port"""
+    def __init__(self):
+        m_portName As String
+        m_baudRate As Integer
+        m_portStatus As PortStatuses
+        m_driverAddress As DriverAddresses
 
-Public Class StoppedMovingEventArgs
-    Inherits EventArgs
-    Private m_reason
-    # The reason that the motor stopped moving.
-    Public Property Reason() As StoppedMovingReason
-        Get
-            return m_reason
-        End Get
-        Set(ByVal value As StoppedMovingReason)
-            m_reason = value
-        End Set
-    End Property
+class StoppedMovingEventArgs:
+    # TODO just use the reason
+    def __init__(self, reason):
+        self.reason = reason
 
-    Public Sub New(ByVal reason As StoppedMovingReason)
-        m_reason = reason
-    End Sub
-End Class
+# Public enums
 
-'Public enums
-Represents a driver address.
-Public Enum DriverAddresses As Byte
-    Unknown = 0
+class DriverAddresses:
+    """Represents a driver address."""
     Driver1 = Asc("1")
     Driver2 = Asc("2")
     Driver3 = Asc("3")
@@ -581,270 +514,235 @@ Public Enum DriverAddresses As Byte
     Drivers9And10And11And12 = Asc("Y")
     Drivers13And14And15And16 = Asc("]")
     AllDrivers = Asc("_")
-End Enum
 
-Represents the status of a COM port.
-Public Enum PortStatuses
-    Indicates that there is an active, available Silverpak on this COM port
-    AvailableSilverpak
-    Indicates that this COM port does not have an active Silverpak
-    Empty
-    Indicates that this COM port could not be read from or written to
-    Invalid
-    Indicates that this COM port is already open by another resource
-    Busy
-End Enum
 
-Represents the reason that the motor stopped moving.
-Public Enum StoppedMovingReason
-    The motor stopped after a GoInfinite() or GoToPosition() command.
-    Normal
-    The InitializeCoordinates() command has completed without being interrupted.
-    Initialized
-    The InitializeCoordinates() command is aborted by calling the StopMotor() method.
-    InitializationAborted
-End Enum
+class PortStatuses:
+    """Represents the status of a COM port."""
+    # Indicates that there is an active, available Silverpak on this COM port
+    AvailableSilverpak = 0
+    # Indicates that this COM port does not have an active Silverpak
+    Empty = 1
+    # Indicates that this COM port could not be read from or written to
+    Invalid = 2
+    # Indicates that this COM port is already open by another resource
+    Busy = 3
 
-'Friend classes
-# Manages the connection to a Silverpak23CE through a serial port.
-<ToolboxItem(False)> _
-Friend Class SilverpakConnectionManager
-    Inherits Component
 
-    'Public fields
+class StoppedMovingReason:
+    """Represents the reason that the motor stopped moving."""
+    # The motor stopped after a GoInfinite() or GoToPosition() command.
+    Normal = 0
+    # The InitializeCoordinates() command has completed without being interrupted.
+    Initialized = 1
+    # The InitializeCoordinates() command is aborted by calling the StopMotor() method.
+    InitializationAborted = 2
+
+
+# Friend classes
+
+class SilverpakConnectionManager:
+    """Manages the connection to a Silverpak23CE through a serial port."""
+
+    # Public fields
     # The command string for a safe query.
-    Public Shared ReadOnly SafeQueryCommandStr As String = GenerateCommand(m_safeQueryCommand, m_safeQueryOperand)
-    # The delay factor for a safe query.
-    Public Const SafeQueryDelayFactor As Single = 3.0!
-    # The minimum amount of time in milliseconds to wait for the Silverpak23CE to respond to a command.
-    Public Const PortDelayUnit As Integer = 50
-
-    'Public properties
-    # The name of the COM port to connect to.
-    Public Property PortName() As String
-        Get
-            return m_portName
-        End Get
-        Set(ByVal value As String)
-            m_portName = value
-        End Set
-    End Property
-    # The baud rate of the COM port to connect to.
-    Public Property BaudRate() As Integer
-        Get
-            return m_baudRate
-        End Get
-        Set(ByVal value As Integer)
-            m_baudRate = value
-        End Set
-    End Property
-    # The driver address of the Silverpak23CE to connect to.
-    Public Property DriverAddress() As DriverAddresses
-        Get
-            return m_driverAddress
-        End Get
-        Set(ByVal value As DriverAddresses)
-            m_driverAddress = value
-        End Set
-    End Property
-
-    'Public constructors
-    Creates a instance of the SilverpakConnectionManager class. This overload is provided for Windows.Forms Class Composition Designer support.
-    Public Sub New(ByVal container As System.ComponentModel.IContainer)
-        MyClass.New()
-        if container IsNot Nothing: container.Add(Me) 'Required for Windows.Forms Class Composition Designer support
-    End Sub
-    Creates a instance of the SilverpakConnectionManager class.
-    Public Sub New()
-        MyBase.New()
-        components = Container()
-        m_serialPortInterface_srlPort = InitializeSerialPort(SerialPort(components))
-    End Sub
-
-    'Public methods
-    # Attempts to connect to a Silverpak23CE using the PortName, BaudRate, and DriverAddress properties. 
-    Returns True if successful.
-    Throws an InvalidSilverpakOperationException if already connected.
-    Public Function Connect() As Boolean
-        SyncLock m_srlPort_lock
-            'Validate SerialPort state
-            if m_serialPortInterface_srlPort.IsOpen: raise InvalidSilverpakOperationException("Already connected.")
-            try: 'except all expected exceptions
-                'apply serial port settings
-                m_serialPortInterface_srlPort.PortName = m_portName
-                m_serialPortInterface_srlPort.BaudRate = m_baudRate
-                'Attempt to connect
-                m_serialPortInterface_srlPort.Open()
-                'Check for a Silverpak23CE
-                Dim response As String = writeAndGetResponse_srlPort(GenerateMessage(m_driverAddress, SafeQueryCommandStr), SafeQueryDelayFactor)
-                if (response IsNot Nothing):
-                    return True
-                Else
-                    closeSerialPort_srlPort()
-                    return False
-                End if
-            except ex As ArgumentOutOfRangeException '.BaudRate
-            except ex As ArgumentNullException '.PortName
-            except ex As ArgumentException '.PortName
-            except ex As UnauthorizedAccessException '.Open
-            except ex As IO.IOException '.Write (called from within writeAndGetResponse_srlPort())
-            End try:
-            'Failed to connect. Make sure the SerialPort is closed
-            closeSerialPort_srlPort()
-            return False
-        End SyncLock
-    End Function
-    Makes sure there is no active connection to a Silverpak23CE.
-    Public Sub Disconnect()
-        SyncLock m_srlPort_lock
-            closeSerialPort_srlPort()
-        End SyncLock
-    End Sub
-
-    Writes the passed complete message to the Silverpak23CE.
-    Throws an InvalidSilverpakOperationException if not connected.
-    <param name="completeMessage">Recommended use generateMessage() to generate this parameter.</param>
-    <param name="delayFactor">How long the the Silverpak23CE is expected to take to process the message, 
-    expressed as a multiple of PortDelatUnit, typically in the range 1.0 to 3.0.</param>
-    Public Sub Write(ByVal completeMessage As String, ByVal delayFactor As Single)
-        SyncLock m_srlPort_lock
-            'Validate state
-            if Not m_serialPortInterface_srlPort.IsOpen: raise InvalidSilverpakOperationException()
-            'write message
-            write_srlPort(completeMessage, delayFactor)
-        End SyncLock
-    End Sub
-
-    Writes the passed message to and returns the body of the response from the Silverpak23CE.
-    if no response was received, returns Nothing.
-    Throws an InvalidSilverpakOperationException if not connected.
-    <param name="completeMessage">Recommended use generateMessage() to generate this parameter.</param>
-    <param name="delayFactor">How long the the Silverpak23CE is expected to take to process the message, 
-    expressed as a multiple of PortDelatUnit, typically in the range 1.0 to 3.0.</param>
-    Public Function WriteAndGetResponse(ByVal completeMessage As String, ByVal delayFactor As Single) As String
-        SyncLock m_srlPort_lock
-            'Validate state
-            if Not m_serialPortInterface_srlPort.IsOpen: raise InvalidSilverpakOperationException()
-            'write messag and get response
-            return writeAndGetResponse_srlPort(completeMessage, delayFactor)
-        End SyncLock
-    End Function
-
-
-    'Private fields
-    # Contains sup-components.
-    Private components As System.ComponentModel.IContainer
-
-    # Field behind the PortName property.
-    Private m_portName As String
-    # Field behind the BaudRate property.
-    Private m_baudRate As Integer
-    # Field behind the DriverAddress property.
-    Private m_driverAddress As DriverAddresses
-
-    'Fields in the SyncLock group: srlPort
-    # Lock object for the SyncLock group: srlPort.
-    Private m_srlPort_lock As Object
-    # The SerialPort object used to communicate with a Silverpak23CE. Part of the SyncLock group: srlPort.
-    Private m_serialPortInterface_srlPort As SerialPort
-
     # The command for a safe query.
     Private Const m_safeQueryCommand As Commands = Commands.QueryControllerStatus
     # The operand for a safe query.
     Private Const m_safeQueryOperand As String = ""
 
-    'Private methods
-    # Disposes this component.
-    Protected Overrides Sub Dispose(ByVal disposing As Boolean)
+    SafeQueryCommandStr = GenerateCommand(m_safeQueryCommand, m_safeQueryOperand)
+    # The delay factor for a safe query.
+    SafeQueryDelayFactor = 3.0
+    # The minimum amount of time in milliseconds to wait for the Silverpak23CE to respond to a command.
+    PortDelayUnit = 50
+
+    # Public properties
+
+    # Public constructors
+    def __init__(self):
+        m_serialPortInterface_srlPort = InitializeSerialPort(SerialPort(components))
+        m_portName As String
+        m_baudRate As Integer
+        m_driverAddress As DriverAddresses
+
+        # Fields in the SyncLock group: srlPort
+        # Lock object for the SyncLock group: srlPort.
+        m_srlPort_lock As Object
+        # The SerialPort object used to communicate with a Silverpak23CE. Part of the SyncLock group: srlPort.
+        m_serialPortInterface_srlPort As SerialPort
+
+    # Public methods
+    def Connect(self):
+        """
+        Attempts to connect to a Silverpak23CE using the PortName, BaudRate, and DriverAddress properties. 
+        Returns True if successful.
+        Throws an InvalidSilverpakOperationException if already connected.
+        """
+        SyncLock m_srlPort_lock:
+            # Validate SerialPort state
+            if m_serialPortInterface_srlPort.IsOpen: raise InvalidSilverpakOperationException("Already connected.")
+            try: # except all expected exceptions
+                # apply serial port settings
+                m_serialPortInterface_srlPort.PortName = m_portName
+                m_serialPortInterface_srlPort.BaudRate = m_baudRate
+                # Attempt to connect
+                m_serialPortInterface_srlPort.Open()
+                # Check for a Silverpak23CE
+                response = writeAndGetResponse_srlPort(GenerateMessage(m_driverAddress, SafeQueryCommandStr), SafeQueryDelayFactor)
+                if response != None:
+                    return True
+                else:
+                    closeSerialPort_srlPort()
+                    return False
+            except ArgumentOutOfRangeException: pass # .BaudRate
+            except ArgumentNullException: pass # .PortName
+            except ArgumentException: pass # .PortName
+            except UnauthorizedAccessException: pass # .Open
+            except IO.IOException: pass # .Write (called from within writeAndGetResponse_srlPort())
+            # Failed to connect. Make sure the SerialPort is closed
+            closeSerialPort_srlPort()
+            return False
+    
+    def Disconnect(self):
+        """Makes sure there is no active connection to a Silverpak23CE."""
+        SyncLock m_srlPort_lock:
+            closeSerialPort_srlPort()
+
+    def Write(completeMessage, delayFactor):
+        """
+        Writes the passed complete message to the Silverpak23CE.
+        Throws an InvalidSilverpakOperationException if not connected.
+        <param name="completeMessage">Recommended use generateMessage() to generate this parameter.</param>
+        <param name="delayFactor">How long the the Silverpak23CE is expected to take to process the message, 
+        expressed as a multiple of PortDelatUnit, typically in the range 1.0 to 3.0.</param>
+        """
+        SyncLock m_srlPort_lock:
+            # Validate state
+            if not m_serialPortInterface_srlPort.IsOpen: raise InvalidSilverpakOperationException()
+            # write message
+            write_srlPort(completeMessage, delayFactor)
+
+    def WriteAndGetResponse(self, completeMessage, delayFactor):
+        """
+        Writes the passed message to and returns the body of the response from the Silverpak23CE.
+        if no response was received, returns Nothing.
+        Throws an InvalidSilverpakOperationException if not connected.
+        <param name="completeMessage">Recommended use generateMessage() to generate this parameter.</param>
+        <param name="delayFactor">How long the the Silverpak23CE is expected to take to process the message, 
+        expressed as a multiple of PortDelatUnit, typically in the range 1.0 to 3.0.</param>
+        """
+        SyncLock m_srlPort_lock:
+            # Validate state
+            if Not m_serialPortInterface_srlPort.IsOpen: raise InvalidSilverpakOperationException()
+            # write messag and get response
+            return writeAndGetResponse_srlPort(completeMessage, delayFactor)
+
+
+
+    # Private methods
+    def Dispose(self):
+        components.Dispose()
+
+    def closeSerialPort_srlPort(self):
+        if not m_serialPortInterface_srlPort.IsOpen:
+            return
         try:
-            if disposing AndAlso components IsNot Nothing:
-                components.Dispose()
-            End if
-        Finally
-            MyBase.Dispose(disposing)
-        End try:
-    End Sub
-
-    Private Sub closeSerialPort_srlPort()
-        if m_serialPortInterface_srlPort.IsOpen:
-            try:
-                m_serialPortInterface_srlPort.Close() 'Close the serial port.
-            except 'Ignore any exceptions that occure while closing.
-            End try:
-        End if
-    End Sub
+            # Close the serial port.
+            m_serialPortInterface_srlPort.Close()
+        except:
+            # Ignore any exceptions that occure while closing.
+            pass
 
 
-    Writes the passed message to and returns the body of the response from the Silverpak23CE.
-    if no response was received, returns Nothing.
-    Part of the SyncLock group: srlPort.
-    <param name="completeMessage">Recommended use generateMessage() to generate this parameter.</param>
-    <param name="delayFactor">How long the the Silverpak23CE is expected to take to process the message, 
-    expressed as a multiple of PortDelatUnit, typically in the range 1.0 to 3.0.</param>
-    Private Function writeAndGetResponse_srlPort(ByVal completeMessage As String, ByVal delayFactor As Single) As String
-        safeReadExisting_srlPort(0.0!) 'Clear the read buffer.
-        safeWrite_srlPort(completeMessage, delayFactor) 'Write the message.
-        Dim totalRx As String = "" 'accumulates chunks of RX data
-        Do 'Read the response from the Silverpak23CE in chunks until the accumulated message is complete.
-            Dim rxStr As String = safeReadExisting_srlPort(1.0!) 'Read a chunk.
-            if rxStr Is Nothing OrElse rxStr = "": return Nothing 'if nothing came through, return nothing in lieu of an infinite loop.
-            totalRx &= rxStr 'Append chunk to accumulated RX data.
-        Loop while Not IsRxDataComplete(totalRx) 'check to see if the accumulated RX data is complete
-        Dim trimResponse As String = TrimRxData(totalRx) 'Trim the RX data. Garunteed to succeed because IsRxDataComplete(totalRx) returned True
-        return trimResponse.Substring(1) 'return only the return data (not the Status Char).
-    End Function
-
-    Writes the passed message to the Silverpak23CE.
-    Part of the SyncLock group: srlPort.
-    <param name="completeMessage">Recommended use generateMessage() to generate this parameter.</param>
-    <param name="delayFactor">How long the the Silverpak23CE is expected to take to process the message, 
-    expressed as a multiple of PortDelatUnit, typically in the range 1.0 to 3.0.</param>
-    Private Sub write_srlPort(ByVal completeMessage As String, ByVal delayFactor As Single)
+    def writeAndGetResponse_srlPort(self, completeMessage, delayFactor):
+        """
+        Writes the passed message to and returns the body of the response from the Silverpak23CE.
+        if no response was received, returns Nothing.
+        Part of the SyncLock group: srlPort.
+        <param name="completeMessage">Recommended use generateMessage() to generate this parameter.</param>
+        <param name="delayFactor">How long the the Silverpak23CE is expected to take to process the message, 
+        expressed as a multiple of PortDelatUnit, typically in the range 1.0 to 3.0.</param>
+        """
+        # Clear the read buffer.
+        safeReadExisting_srlPort(0.0)
+        # Write the message.
         safeWrite_srlPort(completeMessage, delayFactor)
-    End Sub
+        # accumulates chunks of RX data
+        totalRx = ""
+        # Read the response from the Silverpak23CE in chunks until the accumulated message is complete.
+        while True:
+            # Read a chunk.
+            rxStr = safeReadExisting_srlPort(1.0)
+            if rxStr == None or rxStr == "":
+                # if nothing came through, return null in lieu of an infinite loop.
+                return None
+            # Append chunk to accumulated RX data.
+            totalRx += rxStr
+            # check to see if the accumulated RX data is complete
+            if IsRxDataComplete(totalRx):
+                break
+        # Trim the RX data. Garunteed to succeed because IsRxDataComplete(totalRx) returned True
+        trimResponse = TrimRxData(totalRx)
+        # return only the return data (not the Status Char).
+        return trimResponse[1:]
 
-    Reads the existing data on the read buffer from the Silverpak23CE after calling waitForSafeReadWrite_srlPort.
-    In the event of an unexcepted exception from SerialPort.ReadExisting(), returns Nothing.
-    Part of the SyncLock group: srlPort.
-    <param name="delayFactor">How long to wait after reading from the Silverpak23CE,
-    expressed as a multiple of PortDelatUnit, typically 1.0.</param>
-    Private Function safeReadExisting_srlPort(ByVal delayFactor As Single) As String
-        'wait for safe read/write
-        waitForSafeReadWrite_srlPort(delayFactor)
-        try: 'except any undocumented exceptions from SerialPort.ReadExisting()
-            return m_serialPortInterface_srlPort.ReadExisting
-        except
-            return Nothing
-        End try:
-    End Function
+    def write_srlPort(self, completeMessage, delayFactor):
+        """
+        Writes the passed message to the Silverpak23CE.
+        Part of the SyncLock group: srlPort.
+        <param name="completeMessage">Recommended use generateMessage() to generate this parameter.</param>
+        <param name="delayFactor">How long the the Silverpak23CE is expected to take to process the message, 
+        expressed as a multiple of PortDelatUnit, typically in the range 1.0 to 3.0.</param>
+        """
+        safeWrite_srlPort(completeMessage, delayFactor)
 
-    Writes the passed message to the Silverpak23CE after calling waitForSafeReadWrite_srlPort.
-    Catches all exceptions from SerialPort.Write().
-    Part of the SyncLock group: srlPort.
-    <param name="completeMessage">Recommended use generateMessage() to generate this parameter.</param>
-    <param name="delayFactor">How long the the Silverpak23CE is expected to take to process the message, 
-    expressed as a multiple of PortDelatUnit, typically in the range 1.0 to 3.0.</param>
-    Private Sub safeWrite_srlPort(ByVal completeMessage As String, ByVal delayFactor As Single)
-        'wait for safe read/write
+    def safeReadExisting_srlPort(self, delayFactor):
+        """
+        Reads the existing data on the read buffer from the Silverpak23CE after calling waitForSafeReadWrite_srlPort.
+        In the event of an unexcepted exception from SerialPort.ReadExisting(), returns Nothing.
+        Part of the SyncLock group: srlPort.
+        <param name="delayFactor">How long to wait after reading from the Silverpak23CE,
+        expressed as a multiple of PortDelatUnit, typically 1.0.</param>
+        """
+        # wait for safe read/write
         waitForSafeReadWrite_srlPort(delayFactor)
-        try: 'except any undocumented exceptions from SerialPort.Write()
+        try:
+            return m_serialPortInterface_srlPort.ReadExisting()
+        except:
+            # except any undocumented exceptions from SerialPort.ReadExisting()
+            return None
+
+    def safeWrite_srlPort(self, completeMessage, delayFactor):
+        """
+        Writes the passed message to the Silverpak23CE after calling waitForSafeReadWrite_srlPort.
+        Catches all exceptions from SerialPort.Write().
+        Part of the SyncLock group: srlPort.
+        <param name="completeMessage">Recommended use generateMessage() to generate this parameter.</param>
+        <param name="delayFactor">How long the the Silverpak23CE is expected to take to process the message, 
+        expressed as a multiple of PortDelatUnit, typically in the range 1.0 to 3.0.</param>
+        """
+        # wait for safe read/write
+        waitForSafeReadWrite_srlPort(delayFactor)
+        try:
             m_serialPortInterface_srlPort.Write(completeMessage)
-        except
-        End try:
-    End Sub
+        except:
+            # except any undocumented exceptions from SerialPort.Write()
+            pass
 
-    # Waits until the time passed by the last call to this method passes.
-    Part of the SyncLock group: srlPort.
-    <param name="incrementFactor">How long to wait after this call to this method,
-    expressed as a multiple of PortDelatUnit, typically 1.0.</param>
-    Private Sub waitForSafeReadWrite_srlPort(ByVal incrementFactor As Single)
-        Static s_nextReadWriteTime As Integer = Environment.TickCount + incrementFactor * PortDelayUnit  'stores the next time that interaction with the Silverpak23CE is safe
-        'wait until s_nextReadWriteTime
+    def waitForSafeReadWrite_srlPort(self, incrementFactor):
+        """
+        Waits until the time passed by the last call to this method passes.
+        Part of the SyncLock group: srlPort.
+        <param name="incrementFactor">How long to wait after this call to this method,
+        expressed as a multiple of PortDelatUnit, typically 1.0.</param>
+        """
+        # stores the next time that interaction with the Silverpak23CE is safe
+        Static s_nextReadWriteTime As Integer = Environment.TickCount + incrementFactor * PortDelayUnit
+        # wait until s_nextReadWriteTime
         Thread.Sleep(Math.Max(0, s_nextReadWriteTime - Environment.TickCount))
-        'increment s_nextReadWriteTime by ReadWriteInterval number of milliseconds
+        # increment s_nextReadWriteTime by ReadWriteInterval number of milliseconds
         s_nextReadWriteTime = Environment.TickCount + PortDelayUnit * incrementFactor
-    End Sub
-End Class
+
 
 'Friend modules
 Consts and Functions for internal use
