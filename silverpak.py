@@ -23,7 +23,7 @@ except ImportError:
 
 # Public classes
 class SilverpakManager:
-    """Provides an interface to a Lin Engineering Silverpak23CE stepper motor"""
+    """Provides an interface to a Lin Engineering Silverpak stepper motor"""
 
     # Public Fields
     DefaultAcceleration = 500
@@ -45,7 +45,7 @@ class SilverpakManager:
     errorCallback = None
     
     def IsActive(self):
-        """Returns a value indicating whether this SilverpakManager is actively connected to a Silverpak23CE"""
+        """Returns a value indicating whether this SilverpakManager is actively connected to a Silverpak"""
         with self._motor_lock:
             return self._motorState_motor != MotorStates.Disconnected
     def IsReady(self):
@@ -89,7 +89,7 @@ class SilverpakManager:
         # Thread that periodically gets the position of the motor. Part of the lock group: posUpd.
         self._positionUpdaterThread_posUpd = threading.Thread(target=self.positionUpdater_run)
 
-        # Raised when the connection to the Silverpak23CE is lost.
+        # Raised when the connection to the Silverpak is lost.
         self.connectionLostHandler = []
         # Raised when the motor stops moving.
         self.stoppedMovingHandler = []
@@ -99,7 +99,7 @@ class SilverpakManager:
     # Public methods
     def Connect(self):
         """
-        Attempts to connect to a Silverpak23CE. 
+        Attempts to connect to a Silverpak. 
         The PortName, BaudRate, and DriverAddress properties must be set or an ArgumentException will be thrown. 
         To auto-detect these properties, see FindAndConnect(). 
         The IsActive property must return False when calling this method or an InvalidSilverpakOperationException will be thrown.
@@ -126,7 +126,7 @@ class SilverpakManager:
     
     def FindAndConnect(self):
         """
-        Attempts to find and connect to a Silverpak23CE. 
+        Attempts to find and connect to a Silverpak. 
         if any of the properties PortName, BaudRate, and DriverAddress are set to their defaults, all of their possible values will be searched. 
         After a successful connection, these properties will be set to their discovered values. 
         The IsActive property must return False when calling this method or an InvalidSilverpakOperationException will be thrown.
@@ -137,16 +137,16 @@ class SilverpakManager:
 
             # Get information for all COM ports being searched
             portInfos = SearchComPorts(self.portName, self.baudRate, self.driverAddress)
-            # Search the list of information for an available Silverpak23CE
+            # Search the list of information for an available Silverpak
             for iPI in portInfos:
                 if iPI.PortStatus == PortStatuses.AvailableSilverpak:
-                    # Listed available Silverpak23CE found
+                    # Listed available Silverpak found
                     # Initialize connection manager's properties
                     self._connectionManager_motor.PortName = iPI.PortName
                     self._connectionManager_motor.BaudRate = iPI.BaudRate
                     self._connectionManager_motor.DriverAddress = iPI.DriverAddress
                     # Attempt to connect
-                    # This should only evaluate to Flase in the event that the Silverpak23CE was disconnected between the call to SearchComPorts and now
+                    # This should only evaluate to Flase in the event that the Silverpak was disconnected between the call to SearchComPorts and now
                     if self._connectionManager_motor.Connect(): 
                         # Connection succeeded
                         # Save connection properties
@@ -156,7 +156,7 @@ class SilverpakManager:
                         self.motorState_motor = MotorStates.Connected
                         return True
                     # In the rare occasion that block is skipped, try: the next iPI
-            # End of list was reached and no available Silverpak23CE was found
+            # End of list was reached and no available Silverpak was found
             return False
 
     def InitializeMotorSettings(self):
@@ -285,7 +285,7 @@ class SilverpakManager:
     
     def Disconnect(self):
         """
-        Terminates the connection to the Silverpak23CE and closes the COM port.
+        Terminates the connection to the Silverpak and closes the COM port.
         Calling this method will raise an InvalidSilverpakOperationException if the IsActive property returns False or if the motor is moving.
         """
         with self._motor_lock:
@@ -366,7 +366,7 @@ class SilverpakManager:
                 # Update postion
                 self.updatePosition()
                 # Wait for the next iteration time
-                time.sleep(Math.Max(0, nextIterationTime - time.time()))
+                time.sleep(max(0, nextIterationTime - time.time()))
         except Exception as ex:
             SilverpakManager.invokeErrorCallback(ex)
     
@@ -405,7 +405,7 @@ class SilverpakManager:
                     self._failCount = 0
                     if self._motorState_motor == MotorStates.InitializingCoordinates_moveToZero:
                         # wait! sometimes the motor will stop at 5000000 and lie about being at the top (stupid old firmware)
-                        if Math.Abs(m_position - 5000000) < 100:
+                        if abs(m_position - 5000000) < 100:
                             self.moveToZero()
                         else:
                             self._motorState_motor = MotorStates.InitializingCoordinates_calibrateHome
@@ -442,7 +442,7 @@ class SilverpakManager:
                     # failed to get a valid position
                     self._failCount += 1
                     if self._failCount >= 5:
-                        # failed 5 times in a row. Silverpak23CE must no longer be available.
+                        # failed 5 times in a row. Silverpak must no longer be available.
                         self._failCount = 0
                         # disconnect
                         self._motorState_motor = MotorStates.Disconnected
@@ -483,7 +483,7 @@ class SilverpakManager:
             raise ex
 
 class InvalidSilverpakOperationException(Exception):
-    """The exception that is thrown when a method call in namespace Silverpak23CE is invalid for the object's current state."""
+    """The exception that is thrown when a method call in namespace Silverpak is invalid for the object's current state."""
 
 
 class PortInformation:
@@ -528,8 +528,8 @@ class SilverpakConnectionManager:
 
     # The delay factor for a safe query.
     SafeQueryDelayFactor = 3.0
-    # The minimum amount of time in milliseconds to wait for the Silverpak23CE to respond to a command.
-    PortDelayUnit = 50 / 1000.0
+    # The minimum amount of time in seconds to wait for the Silverpak to respond to a command.
+    PortDelayUnit = 0.05
 
     # Public properties
 
@@ -542,7 +542,7 @@ class SilverpakConnectionManager:
         # Lock object for the serial port
         self._srlPort_lock = threading.RLock()
         # The serial port object used to communicate with a Silverpak.
-        self._serialPortInterface_srlPort = InitializeSerialPort(serial.Serial())
+        self._serialPortInterface_srlPort = makeSerialPort()
 
     # Public methods
     def Connect(self):
@@ -560,7 +560,7 @@ class SilverpakConnectionManager:
                 self._serialPortInterface_srlPort.BaudRate = m_baudRate
                 # Attempt to connect
                 self._serialPortInterface_srlPort.Open()
-                # Check for a Silverpak23CE
+                # Check for a Silverpak
                 response = self.writeAndGetResponse_srlPort(GenerateMessage(self.driverAddress, SafeQueryCommandStr), self.SafeQueryDelayFactor)
                 if response != None:
                     return True
@@ -577,16 +577,16 @@ class SilverpakConnectionManager:
             return False
     
     def Disconnect(self):
-        """Makes sure there is no active connection to a Silverpak23CE."""
+        """Makes sure there is no active connection to a Silverpak."""
         with self._srlPort_lock:
             self.closeSerialPort_srlPort()
 
     def Write(completeMessage, delayFactor):
         """
-        Writes the passed complete message to the Silverpak23CE.
+        Writes the passed complete message to the Silverpak.
         Throws an InvalidSilverpakOperationException if not connected.
         <param name="completeMessage">Recommended use generateMessage() to generate this parameter.</param>
-        <param name="delayFactor">How long the the Silverpak23CE is expected to take to process the message, 
+        <param name="delayFactor">How long the the Silverpak is expected to take to process the message, 
         expressed as a multiple of PortDelatUnit, typically in the range 1.0 to 3.0.</param>
         """
         with m_srlPort_lock:
@@ -597,11 +597,11 @@ class SilverpakConnectionManager:
 
     def WriteAndGetResponse(self, completeMessage, delayFactor):
         """
-        Writes the passed message to and returns the body of the response from the Silverpak23CE.
+        Writes the passed message to and returns the body of the response from the Silverpak.
         if no response was received, returns null.
         Throws an InvalidSilverpakOperationException if not connected.
         <param name="completeMessage">Recommended use generateMessage() to generate this parameter.</param>
-        <param name="delayFactor">How long the the Silverpak23CE is expected to take to process the message, 
+        <param name="delayFactor">How long the the Silverpak is expected to take to process the message, 
         expressed as a multiple of PortDelatUnit, typically in the range 1.0 to 3.0.</param>
         """
         with m_srlPort_lock:
@@ -623,11 +623,11 @@ class SilverpakConnectionManager:
 
     def writeAndGetResponse_srlPort(self, completeMessage, delayFactor):
         """
-        Writes the passed message to and returns the body of the response from the Silverpak23CE.
+        Writes the passed message to and returns the body of the response from the Silverpak.
         if no response was received, returns null.
         Part of the lock group: srlPort.
         <param name="completeMessage">Recommended use generateMessage() to generate this parameter.</param>
-        <param name="delayFactor">How long the the Silverpak23CE is expected to take to process the message, 
+        <param name="delayFactor">How long the the Silverpak is expected to take to process the message, 
         expressed as a multiple of PortDelatUnit, typically in the range 1.0 to 3.0.</param>
         """
         # Clear the read buffer.
@@ -636,7 +636,7 @@ class SilverpakConnectionManager:
         self.safeWrite_srlPort(completeMessage, delayFactor)
         # accumulates chunks of RX data
         totalRx = ""
-        # Read the response from the Silverpak23CE in chunks until the accumulated message is complete.
+        # Read the response from the Silverpak in chunks until the accumulated message is complete.
         while True:
             # Read a chunk.
             rxStr = self.safeReadExisting_srlPort(1.0)
@@ -655,20 +655,20 @@ class SilverpakConnectionManager:
 
     def write_srlPort(self, completeMessage, delayFactor):
         """
-        Writes the passed message to the Silverpak23CE.
+        Writes the passed message to the Silverpak.
         Part of the lock group: srlPort.
         <param name="completeMessage">Recommended use generateMessage() to generate this parameter.</param>
-        <param name="delayFactor">How long the the Silverpak23CE is expected to take to process the message, 
+        <param name="delayFactor">How long the the Silverpak is expected to take to process the message, 
         expressed as a multiple of PortDelatUnit, typically in the range 1.0 to 3.0.</param>
         """
         self.safeWrite_srlPort(completeMessage, delayFactor)
 
     def safeReadExisting_srlPort(self, delayFactor):
         """
-        Reads the existing data on the read buffer from the Silverpak23CE after calling waitForSafeReadWrite_srlPort.
+        Reads the existing data on the read buffer from the Silverpak after calling waitForSafeReadWrite_srlPort.
         In the event of an unexcepted exception from SerialPort.ReadExisting(), returns null.
         Part of the lock group: srlPort.
-        <param name="delayFactor">How long to wait after reading from the Silverpak23CE,
+        <param name="delayFactor">How long to wait after reading from the Silverpak,
         expressed as a multiple of PortDelatUnit, typically 1.0.</param>
         """
         # wait for safe read/write
@@ -681,11 +681,11 @@ class SilverpakConnectionManager:
 
     def safeWrite_srlPort(self, completeMessage, delayFactor):
         """
-        Writes the passed message to the Silverpak23CE after calling waitForSafeReadWrite_srlPort.
+        Writes the passed message to the Silverpak after calling waitForSafeReadWrite_srlPort.
         Catches all exceptions from SerialPort.Write().
         Part of the lock group: srlPort.
         <param name="completeMessage">Recommended use generateMessage() to generate this parameter.</param>
-        <param name="delayFactor">How long the the Silverpak23CE is expected to take to process the message, 
+        <param name="delayFactor">How long the the Silverpak is expected to take to process the message, 
         expressed as a multiple of PortDelatUnit, typically in the range 1.0 to 3.0.</param>
         """
         # wait for safe read/write
@@ -703,13 +703,13 @@ class SilverpakConnectionManager:
         <param name="incrementFactor">How long to wait after this call to this method,
         expressed as a multiple of PortDelatUnit, typically 1.0.</param>
         """
-        # stores the next time that interaction with the Silverpak23CE is safe
+        # stores the next time that interaction with the Silverpak is safe
         try:
             self._nextReadWriteTime
         except AttributeError:
             self._nextReadWriteTime = time.time()
         # wait until next read write time
-        time.sleep(Math.Max(0, self._nextReadWriteTime - time.time()))
+        time.sleep(max(0, self._nextReadWriteTime - time.time()))
         # increment next read write time
         self._nextReadWriteTime = time.time() + self.PortDelayUnit * incrementFactor
 
@@ -723,7 +723,7 @@ DTProtocolComDataBits = 8
 DTProtocolComParity = serial.PARITY_NONE
 DTProtocolComStopBits = serial.STOPBITS_ONE
 
-# Returns a complete message to write to the Silverpak23CE.
+# Returns a complete message to write to the Silverpak.
 def GenerateMessage(recipient, commandList):
     return DTProtocolTxStartStr + recipient + commandList + DTProtocolTxEndStr
 
@@ -743,8 +743,10 @@ def TrimRxData(rxData):
     fstTrim = rxData[start + len(DTProtocolRxStartStr)]
     return fstTrim[:fstTrim.find(DTProtocolRxEndStr)]
 
-def InitializeSerialPort(srlPort):
+def makeSerialPort():
     """Configures non-variable properties of the passed serial port object in accordance with DT Protocol."""
+    srlPort = serial.Serial()
+    srlPort.timeout = 0
     srlPort.bytesize = DTProtocolComDataBits
     srlPort.parity = DTProtocolComParity
     srlPort.stopbits = DTProtocolComStopBits
@@ -752,25 +754,21 @@ def InitializeSerialPort(srlPort):
 
 def SearchComPorts(portName=SilverpakManager.DefaultPortname, baudRate=SilverpakManager.DefaultBaudRate, driverAddress=SilverpakManager.DefaultDriverAddress):
     """
-    Searches for available Silverpak23CE's and returns a PortInformation class for every serached COM port.
+    Searches for available Silverpak's and returns a PortInformation class for every serached COM port.
     if any parameters are not set, all possible values for the parameters will be attempted.
     This method can raise an ArgumentOutOfRangeException or an ArgumentException if passed values are invalid.
     """
     if portName == SilverpakManager.DefaultPortname:
         # Search all COM ports
-        allPortNames = SerialPort.GetPortNames()
-        rtnAry = []
-        for portName in allPortNames:
-            # Search this COM port
-            rtnAry.append(SearchBaudRates(portNames, baudRate, driverAddress))
-        return rtnAry
+        allPortNames = ["COM%i" % i for i in range(1, 9)] 
+        return [SearchBaudRates(portName, baudRate, driverAddress) for portName in allPortNames]
     else:
         # Search a specific COM port
         return [SearchBaudRates(portName, baudRate, driverAddress)]
 
 def SearchBaudRates(portName, baudRate=SilverpakManager.DefaultBaudRate, driverAddress=SilverpakManager.DefaultDriverAddress):
     """
-    Searches for an available Silverpak23CE at the specified COM port.
+    Searches for an available Silverpak at the specified COM port.
     if any parameters are not set, all possible values for the parameters will be attempted.
     This method can raise an ArgumentOutOfRangeException or an ArgumentException if passed values are invalid.
     """
@@ -790,7 +788,7 @@ def SearchBaudRates(portName, baudRate=SilverpakManager.DefaultBaudRate, driverA
 
 def SearchDriverAddresses(portName, baudRate, driverAddress=SilverpakManager.DefaultDriverAddress):
     """
-    Searches for an available Silverpak23CE at the specified COM port with the specified baud rate.
+    Searches for an available Silverpak at the specified COM port with the specified baud rate.
     if any parameters are not set, all possible values for the parameters will be attempted.
     Returns null instead of a PortInformation with .PortStatus = Empty.
     This method can raise an ArgumentOutOfRangeException or an ArgumentException if passed values are invalid.
@@ -810,25 +808,26 @@ def SearchDriverAddresses(portName, baudRate, driverAddress=SilverpakManager.Def
 _nextSerialPortTime = time.time()
 def GetSilverpakPortInfo(portName, baudRate, driverAddress):
     """
-    Searches for an available Silverpak23CE at the specified COM port with the specified baud rate and driver address.
+    Searches for an available Silverpak at the specified COM port with the specified baud rate and driver address.
     Returns null instead of a PortInformation with .PortStatus = Empty.
     This method can raise an ArgumentOutOfRangeException or an ArgumentException if passed values are invalid.
     """
-    sp = InitializeSerialPort(serial.Serial())
+    sp = makeSerialPort()
     # set SerialPort parameters and allow exceptions to bubble out
     sp.port = portName
     sp.baudrate = baudRate
 
     # delay if this method has been called recently
-    time.sleep(Math.Max(0, _nextSerialPortTime - time.time()))
+    global _nextSerialPortTime
+    time.sleep(max(0, _nextSerialPortTime - time.time()))
     _nextSerialPortTime = time.time() + SilverpakConnectionManager.PortDelayUnit
 
     # test the COM port
     try:
         # Open the serial port. can raise UnauthorizedAccessException
-        sp.Open()
+        sp.open()
         # Write a safe query. can raise IOException
-        sp.Write(GenerateMessage(driverAddress, SafeQueryCommandStr))
+        sp.write(GenerateMessage(driverAddress, SafeQueryCommandStr))
         # read response
         # accumulates chunks of RX data
         totalRx = ""
@@ -836,7 +835,7 @@ def GetSilverpakPortInfo(portName, baudRate, driverAddress):
             # wait for a chunk to be written to the read buffer
             time.sleep(SilverpakConnectionManager.PortDelayUnit)
             # retrieve any data from the read buffer
-            newRx = sp.ReadExisting
+            newRx = sp.read(1)
             if newRx == "":
                 # abort if no data was written
                 return None
@@ -851,12 +850,15 @@ def GetSilverpakPortInfo(portName, baudRate, driverAddress):
             driverAddress=driverAddress,
             portStatus=PortStatuses.AvailableSilverpak,
         )
-    except UnauthorizedAccessException:
-        # Port was already open
-        return PortInformation(portName=portName, portStatus=PortStatuses.Busy)
-    except IO.IOException:
-        # Port was invalid (such as a Bluetooth virtual COM port)
-        return PortInformation(portName=portName, portStatus=PortStatuses.Invalid)
+#    except UnauthorizedAccessException:
+#        # Port was already open
+#        return PortInformation(portName=portName, portStatus=PortStatuses.Busy)
+#    except IO.IOException:
+#        # Port was invalid (such as a Bluetooth virtual COM port)
+#        return PortInformation(portName=portName, portStatus=PortStatuses.Invalid)
+    except Exception as ex:
+        print(ex)
+        return None
     finally:
         # make sure the port is closed
         try:
@@ -951,9 +953,9 @@ class MotorStates:
     Disconnected = "[Disconnected]"
     # Serial Port is just open.
     Connected = "[Connected]"
-    # Motor settings have been written to the Silverpak23CE.
+    # Motor settings have been written to the Silverpak.
     InitializedSettings = "[InitializedSettings]"
-    # Small movements have been issued to the Silverpak23CE to clear initialization quirks.
+    # Small movements have been issued to the Silverpak to clear initialization quirks.
     InitializedSmoothMotion = "[InitializedSmoothMotion]"
     # In the process of moving to the zero position.
     InitializingCoordinates_moveToZero = "[InitializingCoordinates_moveToZero]"
