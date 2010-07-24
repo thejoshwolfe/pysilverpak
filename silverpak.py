@@ -4,7 +4,7 @@ Imports System.Threading
 Imports System.ComponentModel
 
 # Public classes
-class SilverpakManager
+class SilverpakManager:
     """Provides an interface to a Lin Engineering Silverpak23CE stepper motor"""
 
     # Public Fields
@@ -744,260 +744,265 @@ class SilverpakConnectionManager:
         s_nextReadWriteTime = Environment.TickCount + PortDelayUnit * incrementFactor
 
 
-'Friend modules
-Consts and Functions for internal use
-Friend Module SilverpakUtils
+# Friend modules
+# Consts and Functions for internal use
 
-    # The beginning of a sent message to a Silverpak23CE.
-    Friend Const DTProtocolTxStartStr As String = "/"
-    # The end of a sent message to a Silverpak23CE.
-    Friend Const DTProtocolTxEndStr As String = "R" & vbCr
-    # The beginning of a received message from a Silverpak23CE.
-    Friend Const DTProtocolRxStartStr As String = "/0"
-    # The end of a received message from a Silverpak23CE.
-    Friend Const DTProtocolRxEndStr As String = Chr(3)
+# The beginning of a sent message to a Silverpak23CE.
+DTProtocolTxStartStr As String = "/"
+# The end of a sent message to a Silverpak23CE.
+DTProtocolTxEndStr As String = "R" & vbCr
+# The beginning of a received message from a Silverpak23CE.
+DTProtocolRxStartStr As String = "/0"
+# The end of a received message from a Silverpak23CE.
+DTProtocolRxEndStr As String = Chr(3)
 
-    # DataBits setting for operating a Silverpak23CE over a serial port.
-    Friend Const DTProtocolComDataBits As Integer = 8
-    # Parity setting for operating a Silverpak23CE over a serial port.
-    Friend Const DTProtocolComParity As IO.Ports.Parity = IO.Ports.Parity.None
-    # StopBits setting for operating a Silverpak23CE over a serial port.
-    Friend Const DTProtocolComStopBits As IO.Ports.StopBits = IO.Ports.StopBits.One
-    # Handshake setting for operating a Silverpak23CE over a serial port.
-    Friend Const DTProtocolComHandshake As IO.Ports.Handshake = IO.Ports.Handshake.None
+# DataBits setting for operating a Silverpak23CE over a serial port.
+DTProtocolComDataBits As Integer = 8
+# Parity setting for operating a Silverpak23CE over a serial port.
+DTProtocolComParity As IO.Ports.Parity = IO.Ports.Parity.None
+# StopBits setting for operating a Silverpak23CE over a serial port.
+DTProtocolComStopBits As IO.Ports.StopBits = IO.Ports.StopBits.One
+# Handshake setting for operating a Silverpak23CE over a serial port.
+DTProtocolComHandshake As IO.Ports.Handshake = IO.Ports.Handshake.None
 
-    # Returns a complete message to write to the Silverpak23CE.
-    <param name="commandList">Recommended use GenerateCommand() to generate this parameter. Multiple commands can be concatenated and passed as this argument.</param>
-    Public Function GenerateMessage(ByVal recipient As DriverAddresses, ByVal commandList As String) As String
-        return DTProtocolTxStartStr & GetDriverAddressStr(recipient) & commandList & DTProtocolTxEndStr
-    End Function
-    Returns a command to pass to GenerateMessage()
-    Public Function GenerateCommand(ByVal cmnd As Commands, Optional ByVal operand As String = "") As String
-        return GetCommandStr(cmnd) & operand
-    End Function
+# Returns a complete message to write to the Silverpak23CE.
+def GenerateMessage(recipient, commandList):
+    """<param name="commandList">Recommended use GenerateCommand() to generate this parameter. Multiple commands can be concatenated and passed as this argument.</param>"""
+    return DTProtocolTxStartStr + GetDriverAddressStr(recipient) + commandList + DTProtocolTxEndStr
+def GenerateCommand(cmnd, operand=""):
+    """Returns a command to pass to GenerateMessage()"""
+    return GetCommandStr(cmnd) + operand
 
-    Returns the character to use in GenerateMessage()
-    Public Function GetDriverAddressStr(ByVal driver As DriverAddresses) As String
-        return Chr(driver)
-    End Function
+def GetDriverAddressStr(driver):
+    """Returns the character to use in GenerateMessage()"""
+    return Chr(driver)
 
-    Returns the string used in GenerateCommand()
-    Public Function GetCommandStr(ByVal command As Commands) As String
-        Select Case command
-            'Homing and Positioning
-            Case Commands.GoHome : return "Z"
-            Case Commands.SetPosition : return "z"
-            Case Commands.GoAbsolute : return "A"
-            Case Commands.SetHomePolarity : return "f"
-            Case Commands.GoPositive : return "P"
-            Case Commands.GoNegative : return "D"
-            Case Commands.SetPulseJogDistance : return "B"
-            Case Commands.TerminateCommand : return "T"
-            Case Commands.SetMotorPolarity : return "F"
+def GetCommandStr(command):
+    """Returns the string used in GenerateCommand()"""
+    return {
+        # Homing and Positioning
+        Commands.GoHome: "Z",
+        Commands.SetPosition: "z",
+        Commands.GoAbsolute: "A",
+        Commands.SetHomePolarity: "f",
+        Commands.GoPositive: "P",
+        Commands.GoNegative: "D",
+        Commands.SetPulseJogDistance: "B",
+        Commands.TerminateCommand: "T",
+        Commands.SetMotorPolarity: "F",
 
-                'Velocity and Acceleration
-            Case Commands.SetVelocity : return "V"
-            Case Commands.SetAcceleration : return "L"
+        # Velocity and Acceleration
+        Commands.SetVelocity: "V",
+        Commands.SetAcceleration: "L",
 
-                'Setting Current
-            Case Commands.SetRunningCurrent : return "m"
-            Case Commands.SetHoldCurrent : return "h"
+        # Setting Current
+        Commands.SetRunningCurrent: "m",
+        Commands.SetHoldCurrent: "h",
 
-                'Looping and Branching
-            Case Commands.BeginLoop : return "g"
-            Case Commands.EndLoop : return "G"
-            Case Commands.Delay : return "M"
-            Case Commands.HaltUntil : return "H"
-            Case Commands.SkipIf : return "S"
-            Case Commands.SetMode : return "n"
+        # Looping and Branching
+        Commands.BeginLoop: "g",
+        Commands.EndLoop: "G",
+        Commands.Delay: "M",
+        Commands.HaltUntil: "H",
+        Commands.SkipIf: "S",
+        Commands.SetMode: "n",
 
-                'Position Correction - Encoder Option Only
-            Case Commands.SetEncoderMode : return "N"
-            Case Commands.SetPositionCorrectionTolerance : return "aC"
-            Case Commands.SetEncoderRatio : return "aE"
-            Case Commands.SetPositionCorrectionRetries : return "au"
-            Case Commands.RecoverEncoderTimeout : return "r"
+        # Position Correction - Encoder Option Only
+        Commands.SetEncoderMode: "N",
+        Commands.SetPositionCorrectionTolerance: "aC",
+        Commands.SetEncoderRatio: "aE",
+        Commands.SetPositionCorrectionRetries: "au",
+        Commands.RecoverEncoderTimeout: "r",
 
-                'Program Stroage and Recall
-            Case Commands.StoreProgram : return "s"
-            Case Commands.ExecuteStoredProgram : return "e"
+        # Program Stroage and Recall
+        Commands.StoreProgram: "s",
+        Commands.ExecuteStoredProgram: "e",
 
-                'Program Execution
-            Case Commands.RunCurrentCommand : return "R"
-            Case Commands.RepeatCurrentCommand : return "X"
+        # Program Execution
+        Commands.RunCurrentCommand: "R",
+        Commands.RepeatCurrentCommand: "X",
 
-                'Microstepping
-            Case Commands.SetMicrostepResolution : return "j"
-            Case Commands.SetMicrostepAdjust : return "o"
+        # Microstepping
+        Commands.SetMicrostepResolution: "j",
+        Commands.SetMicrostepAdjust: "o",
 
-                'On/Off Drivers (Outputs)
-            Case Commands.SetOutputOnOff : return "J"
+        # On/Off Drivers (Outputs)
+        Commands.SetOutputOnOff: "J",
 
-                'Query Commands
-            Case Commands.QueryMotorPosition : return "?0"
-            Case Commands.QueryStartVelocity : return "?1"
-            Case Commands.QuerySlewSpeed : return "?2"
-            Case Commands.QueryStopSpeed : return "?3"
-            Case Commands.QueryInputs : return "?4"
-            Case Commands.QueryCurrentVelocityModeSpeed : return "?5"
-            Case Commands.QueryMicrostepSize : return "?6"
-            Case Commands.QueryMicrostepAdjust : return "?7"
-            Case Commands.QueryEncoderPosition : return "?8"
-            Case Commands.ClearMemory : return "?9"
+        # Query Commands
+        Commands.QueryMotorPosition: "?0",
+        Commands.QueryStartVelocity: "?1",
+        Commands.QuerySlewSpeed: "?2",
+        Commands.QueryStopSpeed: "?3",
+        Commands.QueryInputs: "?4",
+        Commands.QueryCurrentVelocityModeSpeed: "?5",
+        Commands.QueryMicrostepSize: "?6",
+        Commands.QueryMicrostepAdjust: "?7",
+        Commands.QueryEncoderPosition: "?8",
+        Commands.ClearMemory: "?9",
 
-            Case Commands.QueryCurrentCommand : return "$"
-            Case Commands.QueryFirmwareVersion : return "&"
-            Case Commands.QueryControllerStatus : return "Q"
-            Case Commands.TerminateCommands : return "T"
-            Case Commands.EchoNumber : return "p"
+        Commands.QueryCurrentCommand: "$",
+        Commands.QueryFirmwareVersion: "&",
+        Commands.QueryControllerStatus: "Q",
+        Commands.TerminateCommands: "T",
+        Commands.EchoNumber: "p",
 
-                'Baud Control
-            Case Commands.SetBaudRate : return "b"
+        # Baud Control
+        Commands.SetBaudRate: "b",
+    }[command]
 
-            Case Else : raise ArgumentException("Unknown Enum Value", "command")
-        End Select
-    End Function
 
-    # Evaluates an RX string received from the Silverpak and returns whether the RX message is complete and valid.
-    Public Function IsRxDataComplete(ByVal rxData As String) As Boolean
-        if rxData Is Nothing: return False 'rxData is Nothing
-        if Not rxData.Contains(DTProtocolRxStartStr): return False 'rxData does not include Start
-        return rxData.Substring(rxData.IndexOf(DTProtocolRxStartStr) + DTProtocolRxStartStr.Length).Contains(DTProtocolRxEndStr)
-    End Function
+# Evaluates an RX string received from the Silverpak and returns whether the RX message is complete and valid.
+def IsRxDataComplete(rxData):
+    if rxData == None:
+        return False
+    rxStartPos = rxData.find(DTProtocolRxStartStr)
+    if rxStartPos == -1:
+        # rxData does not include Start
+        return False
+    return rxData.find(DTProtocolRxEndStr, rxStartPos + len(DTProtocolRxStartStr)) != -1
 
-    Returns just the status char and data from the passed RX message. Returns Nothing if RX data is incomplete or invalid.
-    Public Function TrimRxData(ByVal rxData As String) As String
-        if rxData Is Nothing: return Nothing 'rxData cannot be Nothing
-        Dim iStart As Integer = rxData.IndexOf(DTProtocolRxStartStr)
-        if iStart < 0: return Nothing 'rxData must include DTPROTOCOL_RX_STARTCHAR
-        Dim fstTrim As String = rxData.Substring(iStart + DTProtocolRxStartStr.Length)
-        Dim iLen As Integer = fstTrim.IndexOf(DTProtocolRxEndStr)
-        if iLen < 0: return Nothing 'rxData must include DTPROTOCOL_RX_ENDCHAR after the DTPROTOCOL_RX_STARTCHAR
-        return fstTrim.Substring(0, iLen)
-    End Function
+def TrimRxData(rxData):
+    """Returns just the status char and data from the passed RX message. RX data must be complete."""
+    start = rxData.find(DTProtocolRxStartStr)
+    fstTrim = rxData[start + len(DTProtocolRxStartStr)]
+    return fstTrim[:fstTrim.find(DTProtocolRxEndStr)]
 
-    Sets the DataBits, Parity, StopBits, and Handshake properties of the passed SerialPort object in accordance with DT Protocol.
-    Public Function InitializeSerialPort(ByVal srlPort As SerialPort) As SerialPort
-        With srlPort
-            .DataBits = DTProtocolComDataBits
-            .Parity = DTProtocolComParity
-            .StopBits = DTProtocolComStopBits
-            .Handshake = DTProtocolComHandshake
-        End With
-        return srlPort
-    End Function
+def InitializeSerialPort(srlPort):
+    """Sets the DataBits, Parity, StopBits, and Handshake properties of the passed SerialPort object in accordance with DT Protocol."""
+    srlPort.DataBits = DTProtocolComDataBits
+    srlPort.Parity = DTProtocolComParity
+    srlPort.StopBits = DTProtocolComStopBits
+    srlPort.Handshake = DTProtocolComHandshake
+    return srlPort
 
+def SearchComPorts(portName=SilverpakManager.DefaultPortname, baudRate=SilverpakManager.DefaultBaudRate, driverAddress=SilverpakManager.DefaultDriverAddress):
+    """
     Searches for available Silverpak23CE's and returns a PortInformation class for every serached COM port.
     if any parameters are not set, all possible values for the parameters will be attempted.
     This method can raise an ArgumentOutOfRangeException or an ArgumentException if passed values are invalid.
-    Public Function SearchComPorts(Optional ByVal portName As String = SilverpakManager.DefaultPortname, Optional ByVal baudRate As Integer = SilverpakManager.DefaultBaudRate, _
-                                   Optional ByVal driverAddress As DriverAddresses = SilverpakManager.DefaultDriverAddress) As PortInformation()
-        if portName = SilverpakManager.DefaultPortname:
-            'Search all COM ports
-            Dim allPortNames() As String = SerialPort.GetPortNames()
-            Dim rtnAry(allPortNames.Length - 1) As PortInformation
-            For i As Integer = 0 To allPortNames.Length - 1
-                'Search this COM port
-                rtnAry(i) = SearchBaudRates(allPortNames(i), baudRate, driverAddress)
-            Next
-            return rtnAry
-        Else
-            'Search a specific COM port
-            return PortInformation() {SearchBaudRates(portName, baudRate, driverAddress)}
-        End if
-    End Function
+    """
+    if portName == SilverpakManager.DefaultPortname:
+        # Search all COM ports
+        allPortNames = SerialPort.GetPortNames()
+        rtnAry = []
+        for portName in allPortNames:
+            # Search this COM port
+            rtnAry.append(SearchBaudRates(portNames, baudRate, driverAddress))
+        return rtnAry
+    else:
+        # Search a specific COM port
+        return [SearchBaudRates(portName, baudRate, driverAddress)]
+
+def SearchBaudRates(portName, baudRate=SilverpakManager.DefaultBaudRate, driverAddress=SilverpakManager.DefaultDriverAddress):
+    """
     Searches for an available Silverpak23CE at the specified COM port.
     if any parameters are not set, all possible values for the parameters will be attempted.
     This method can raise an ArgumentOutOfRangeException or an ArgumentException if passed values are invalid.
-    Public Function SearchBaudRates(ByVal portName As String, Optional ByVal baudRate As Integer = SilverpakManager.DefaultBaudRate, _
-                                    Optional ByVal driverAddress As DriverAddresses = SilverpakManager.DefaultDriverAddress) As PortInformation
-        Dim portInfo As PortInformation = Nothing
-        if baudRate = SilverpakManager.DefaultBaudRate:
-            'Search all baud rates
-            For Each iBaudRate As Integer In Integer() {9600, 19200, 38400}
-                portInfo = SearchDriverAddresses(portName, iBaudRate, driverAddress)
-                if portInfo IsNot Nothing: Exit For
-            Next
-        Else
-            'Search specific baud rate
+    """
+    portInfo = None
+    if baudRate == SilverpakManager.DefaultBaudRate:
+        # Search all baud rates
+        for baudRate in (9600, 19200, 38400):
             portInfo = SearchDriverAddresses(portName, baudRate, driverAddress)
-        End if
-        if portInfo Is Nothing: portInfo = PortInformation With {.PortName = portName, .PortStatus = PortStatuses.Empty}
-        return portInfo
-    End Function
+            if portInfo != None:
+                break
+    else:
+        # Search specific baud rate
+        portInfo = SearchDriverAddresses(portName, baudRate, driverAddress)
+    if portInfo == None:
+        portInfo = PortInformation()
+        portInfo.PortName = portName
+        portInfo.PortStatus = PortStatuses.Empty
+    return portInfo
+
+def SearchDriverAddresses(portName, baudRate, driverAddress=SilverpakManager.DefaultDriverAddress):
+    """
     Searches for an available Silverpak23CE at the specified COM port with the specified baud rate.
     if any parameters are not set, all possible values for the parameters will be attempted.
     Returns Nothing instead of a PortInformation with .PortStatus = Empty.
     This method can raise an ArgumentOutOfRangeException or an ArgumentException if passed values are invalid.
-    Public Function SearchDriverAddresses(ByVal portName As String, ByVal baudRate As Integer, _
-                                          Optional ByVal driverAddress As DriverAddresses = SilverpakManager.DefaultDriverAddress) As PortInformation
-        if driverAddress = SilverpakManager.DefaultDriverAddress:
-            'Search all driver addresses
-            Dim allDriverAddresses() As DriverAddresses = [Enum].GetValues(GetType(DriverAddresses))
-            Dim portInfo As PortInformation = Nothing
-            For i As Integer = 1 To 16 'from Driver1 to Driver0 (includes Driver2 - Driver9, DriverA - DriverF)
-                portInfo = GetSilverpakPortInfo(portName, baudRate, allDriverAddresses(i))
-                if portInfo IsNot Nothing: Exit For
-            Next
-            return portInfo
-        Else
-            'Search specified driver address
-            return GetSilverpakPortInfo(portName, baudRate, driverAddress)
-        End if
-    End Function
+    """
+    if driverAddress == SilverpakManager.DefaultDriverAddress:
+        # Search all driver addresses
+        portInfo = None
+        for driverAddress in DriverAddresses.searchableValues:
+            portInfo = GetSilverpakPortInfo(portName, baudRate, driverAddress)
+            if portInfo != None:
+                break
+        return portInfo
+    else:
+        # Search specified driver address
+        return GetSilverpakPortInfo(portName, baudRate, driverAddress)
+
+def GetSilverpakPortInfo(portName, baudRate, driverAddress):
+    """
     Searches for an available Silverpak23CE at the specified COM port with the specified baud rate and driver address.
     Returns Nothing instead of a PortInformation with .PortStatus = Empty.
     This method can raise an ArgumentOutOfRangeException or an ArgumentException if passed values are invalid.
-    Public Function GetSilverpakPortInfo(ByVal portName As String, ByVal baudRate As Integer, _
-                                         ByVal driverAddress As DriverAddresses) As PortInformation
-        Using sp As SerialPort = InitializeSerialPort(SerialPort())
-            'set SerialPort parameters and allow exceptions to bubble out
-            sp.PortName = portName
-            sp.BaudRate = baudRate
+    """
+    with InitializeSerialPort(SerialPort()) as sp:
+        # set SerialPort parameters and allow exceptions to bubble out
+        sp.PortName = portName
+        sp.BaudRate = baudRate
 
-            'delay if this method has been called recently
-            Static s_nextSerialPortTime As Integer = Environment.TickCount + SilverpakConnectionManager.PortDelayUnit
-            Thread.Sleep(Math.Max(0, s_nextSerialPortTime - Environment.TickCount))
-            s_nextSerialPortTime = Environment.TickCount + SilverpakConnectionManager.PortDelayUnit
+        # delay if this method has been called recently
+        Static s_nextSerialPortTime As Integer = Environment.TickCount + SilverpakConnectionManager.PortDelayUnit
+        Thread.Sleep(Math.Max(0, s_nextSerialPortTime - Environment.TickCount))
+        s_nextSerialPortTime = Environment.TickCount + SilverpakConnectionManager.PortDelayUnit
 
-            'test the COM port
+        # test the COM port
+        try:
+            # Open the serial port. can raise UnauthorizedAccessException
+            sp.Open()
+            # Write a safe query. can raise IOException
+            sp.Write(GenerateMessage(driverAddress, SilverpakConnectionManager.SafeQueryCommandStr))
+            # read response
+            # accumulates chunks of RX data
+            totalRx = ""
+            while True:
+                # wait for a chunk to be written to the read buffer
+                Thread.Sleep(SilverpakConnectionManager.PortDelayUnit)
+                # retrieve any data from the read buffer
+                newRx = sp.ReadExisting
+                if newRx = "":
+                    # abort if no data was written
+                    return Nothing
+                totalRx += newRx
+                # check to see if the RX data is complete
+                if IsRxDataComplete(totalRx):
+                    break
+            # success
+            portInfo = PortInformation()
+            portInfo.PortName = portName,
+            portInfo.BaudRate = baudRate
+            portInfo.DriverAddress = driverAddress
+            portInfo.PortStatus = PortStatuses.AvailableSilverpak
+            return portInfo
+        except UnauthorizedAccessException:
+            # Port was already open
+            portInfo = PortInformation()
+            portInfo.PortName = portName
+            portInfo.PortStatus = PortStatuses.Busy
+            return portInfo
+        except IO.IOException:
+            # Port was invalid (such as a Bluetooth virtual COM port)
+            portInfo = PortInformation()
+            portInfo.PortName = portName
+            portInfo.PortStatus = PortStatuses.Invalid
+            return portInfo
+        finally:
+            # make sure the port is closed
             try:
-                'Open the serial port
-                sp.Open() 'can raise UnauthorizedAccessException
-                'Write a safe query
-                sp.Write(GenerateMessage(driverAddress, SilverpakConnectionManager.SafeQueryCommandStr)) 'can raise IOException
-                'read response
-                Dim totalRx As String = "" 'accumulates chunks of RX data
-                Do
-                    Thread.Sleep(SilverpakConnectionManager.PortDelayUnit) 'wait for a chunk to be written to the read buffer
-                    Dim newRx As String = sp.ReadExisting 'retrieve any data from the read buffer
-                    if newRx = "": return Nothing 'abort if no data was written
-                    totalRx &= newRx
-                Loop while Not IsRxDataComplete(totalRx) 'check to see if the RX data is complete
-                'success
-                return PortInformation With {.PortName = portName, .BaudRate = baudRate, .DriverAddress = driverAddress, .PortStatus = PortStatuses.AvailableSilverpak}
-            except ex As UnauthorizedAccessException 'thrown by .Open
-                'Port was already open
-                return PortInformation With {.PortName = portName, .PortStatus = PortStatuses.Busy}
-            except ex As IO.IOException 'thrown by .Write
-                'Port was invalid (such as a Bluetooth virtual COM port)
-                return PortInformation With {.PortName = portName, .PortStatus = PortStatuses.Invalid}
-            Finally
-                'make sure the port is closed
-                try:
-                    if sp.IsOpen: sp.Close()
-                except
-                End try:
-            End try:
-        End Using
-    End Function
+                if sp.IsOpen: sp.Close()
+            except:
+                pass
 
-End Module
 
-'Friend enums
-All available commands. See Specification Commands for more information.
-Friend Enum Commands
-    'Homing and Positioning
+# Friend enums
+class Commands:
+    """All available commands. See Specification Commands for more information."""
+    # Homing and Positioning
     # "Z"
     GoHome = 1
     # "z"
@@ -1017,19 +1022,19 @@ Friend Enum Commands
     # "F"
     SetMotorPolarity = 9
 
-    'Velocity and Acceleration
+    # Velocity and Acceleration
     # "V"
     SetVelocity = 10
     # "A"
     SetAcceleration = 11
 
-    'Setting Current
+    # Setting Current
     # "m"
     SetRunningCurrent = 12
     # "h"
     SetHoldCurrent = 13
 
-    'Looping and Branching
+    # Looping and Branching
     # "g"
     BeginLoop = 14
     # "G"
@@ -1043,7 +1048,7 @@ Friend Enum Commands
     # "n"
     SetMode = 19
 
-    'Position Correction - Encoder Option Only
+    # Position Correction - Encoder Option Only
     # "N"
     SetEncoderMode = 20
     # "aC"
@@ -1055,29 +1060,29 @@ Friend Enum Commands
     # "r"
     RecoverEncoderTimeout = 24
 
-    'Program Stroage and Recall
+    # Program Stroage and Recall
     # "s"
     StoreProgram = 25
     # "e"
     ExecuteStoredProgram = 26
 
-    'Program Execution
+    # Program Execution
     # "R"
     RunCurrentCommand = 27
     # "X"
     RepeatCurrentCommand = 28
 
-    'Microstepping
+    # Microstepping
     # "j"
     SetMicrostepResolution = 29
     # "o"
     SetMicrostepAdjust = 30
 
-    'On/Off Drivers (Outputs)
+    # On/Off Drivers (Outputs)
     # "J"
     SetOutputOnOff = 31
 
-    'Query Commands
+    # Query Commands
     # "?0"
     QueryMotorPosition = 32
     # "?1"
@@ -1110,32 +1115,30 @@ Friend Enum Commands
     # "p"
     EchoNumber = 46
 
-    'Baud Control
+    # Baud Control
     # "b"
     SetBaudRate = 47
-End Enum
 
-States for the motor
-Friend Enum MotorStates
+class MotorStates:
+    """States for the motor"""
     # Serial Port is closed.
-    Disconnected
+    Disconnected = 0
     # Serial Port is just open.
-    Connected
+    Connected = 1
     # Motor settings have been written to the Silverpak23CE.
-    InitializedSettings
+    InitializedSettings = 2
     # Small movements have been issued to the Silverpak23CE to clear initialization quirks.
-    InitializedSmoothMotion
+    InitializedSmoothMotion = 3
     # In the process of moving to the zero position.
-    InitializingCoordinates_moveToZero
+    InitializingCoordinates_moveToZero = 4
     # The "official" homing command. should complete very quickly.
-    InitializingCoordinates_calibrateHome
+    InitializingCoordinates_calibrateHome = 5
     # In the process of aborting coordinate initialization.
-    AbortingCoordinateInitialization
+    AbortingCoordinateInitialization = 6
     # Fully initialized and stopped.
-    Ready
+    Ready = 7
     # In the process of moving.
-    Moving
-End Enum
+    Moving = 8
 
 
 
