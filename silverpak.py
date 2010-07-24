@@ -20,6 +20,7 @@ except ImportError:
     sys.stderr.write("\ninstall this: http://pyserial.sourceforge.net/\n\n")
     raise
 
+__all__ = ["SilverpakManager", "getDriverAddress"]
 
 # Public classes
 class SilverpakManager:
@@ -138,24 +139,25 @@ class SilverpakManager:
             # Get information for all COM ports being searched
             portInfos = SearchComPorts(self.portName, self.baudRate, self.driverAddress)
             # Search the list of information for an available Silverpak
-            for iPI in portInfos:
-                if iPI.PortStatus == PortStatuses.AvailableSilverpak:
-                    # Listed available Silverpak found
-                    # Initialize connection manager's properties
-                    self._connectionManager_motor.PortName = iPI.PortName
-                    self._connectionManager_motor.BaudRate = iPI.BaudRate
-                    self._connectionManager_motor.DriverAddress = iPI.DriverAddress
-                    # Attempt to connect
-                    # This should only evaluate to Flase in the event that the Silverpak was disconnected between the call to SearchComPorts and now
-                    if self._connectionManager_motor.Connect(): 
-                        # Connection succeeded
-                        # Save connection properties
-                        self.portName = iPI.PortName
-                        self.baudRate = iPI.BaudRate
-                        self.driverAddress = iPI.DriverAddress
-                        self.motorState_motor = MotorStates.Connected
-                        return True
-                    # In the rare occasion that block is skipped, try: the next iPI
+            for portInfo in portInfos:
+                if portInfo.portStatus != PortStatuses.AvailableSilverpak:
+                    continue
+                # Listed available Silverpak found
+                # Initialize connection manager's properties
+                self._connectionManager_motor.PortName = portInfo.portName
+                self._connectionManager_motor.BaudRate = portInfo.baudRate
+                self._connectionManager_motor.DriverAddress = portInfo.driverAddress
+                # Attempt to connect
+                if not self._connectionManager_motor.Connect():
+                    # this should only happen in the rare event that the Silverpak was disconnected between the call to SearchComPorts and now
+                    continue
+                # Connection succeeded
+                # Save connection properties
+                self.portName = portInfo.portName
+                self.baudRate = portInfo.baudRate
+                self.driverAddress = portInfo.driverAddress
+                self.motorState_motor = MotorStates.Connected
+                return True
             # End of list was reached and no available Silverpak was found
             return False
 
@@ -488,11 +490,13 @@ class InvalidSilverpakOperationException(Exception):
 
 class PortInformation:
     """Represents a collection of data for reporting the status of a COM port"""
-    def __init__(self, partName=None, baudRate=0, portStatus=None, driverAddress=None):
+    def __init__(self, portName=None, baudRate=0, portStatus=None, driverAddress=None):
         self.portName = portName
         self.baudRate = baudRate
         self.portStatus = portStatus
         self.driverAddress = driverAddress
+    def __repr__(self):
+        return "PortInformation({0})".format(", ".join("{0}={1}".format(*pair) for pair in self.__dict__.items()))
 
 allDriverAddresses = "@123456789:;<=>?"
 def getDriverAddress(index):
@@ -850,19 +854,17 @@ def GetSilverpakPortInfo(portName, baudRate, driverAddress):
             driverAddress=driverAddress,
             portStatus=PortStatuses.AvailableSilverpak,
         )
-#    except UnauthorizedAccessException:
-#        # Port was already open
-#        return PortInformation(portName=portName, portStatus=PortStatuses.Busy)
-#    except IO.IOException:
-#        # Port was invalid (such as a Bluetooth virtual COM port)
-#        return PortInformation(portName=portName, portStatus=PortStatuses.Invalid)
+    except serial.serialutil.SerialException as ex:
+        # TODO: refine this error checking
+        return PortInformation(portName=portName, portStatus=PortStatuses.Invalid)
     except Exception as ex:
-        print(ex)
+        print(list(sys.exc_info()))
         return None
     finally:
         # make sure the port is closed
         try:
-            if sp.IsOpen: sp.Close()
+            if sp.isOpen():
+                sp.close()
         except:
             pass
 
