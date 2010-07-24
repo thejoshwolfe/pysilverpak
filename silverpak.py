@@ -1,8 +1,25 @@
+"""
 
+module for controlling a Silverpak stepper motor over a serial port.
+
+supported devices:
+ - Silverpak 23CE
+   - http://www.linengineering.com/LinE/contents/stepmotors/SilverPak_23CE.aspx
+   - http://www.linengineering.com/LinE/contents/stepmotors/pdf/Silverpak17C-256uStepping.pdf
+ - Silverpak 17CE
+   - http://www.linengineering.com/LinE/contents/stepmotors/SilverPak_17CE.aspx
+   - http://www.linengineering.com/LinE/contents/stepmotors/pdf/Silverpak17C-256uStepping.pdf
+"""
+
+import sys
 import time, threading
 
-# http://pyserial.sourceforge.net/
-import serial
+try:
+    import serial
+except ImportError:
+    sys.stderr.write("\ninstall this: http://pyserial.sourceforge.net/\n\n")
+    raise
+
 
 # Public classes
 class SilverpakManager:
@@ -11,7 +28,7 @@ class SilverpakManager:
     # Public Fields
     DefaultAcceleration = 500
     DefaultBaudRate = -1
-    DefaultDriverAddress = DriverAddresses.Unknown
+    DefaultDriverAddress = None
     DefaultEncoderRatio = 10266
     DefaultHoldingCurrent = 5
     DefaultHomePolarity = 0
@@ -478,48 +495,13 @@ class PortInformation:
         self.portStatus = portStatus
         self.driverAddress = driverAddress
 
-class StoppedMovingEventArgs:
-    # TODO just use the reason
-    def __init__(self, reason):
-        self.reason = reason
-
-# Public enums
-
-class DriverAddresses:
-    """Represents a driver address."""
-    Driver1 = Asc("1")
-    Driver2 = Asc("2")
-    Driver3 = Asc("3")
-    Driver4 = Asc("4")
-    Driver5 = Asc("5")
-    Driver6 = Asc("6")
-    Driver7 = Asc("7")
-    Driver8 = Asc("8")
-    Driver9 = Asc("9")
-    DriverA = Asc(":")
-    DriverB = Asc(";")
-    DriverC = Asc("<")
-    DriverD = Asc("=")
-    DriverE = Asc(">")
-    DriverF = Asc("?")
-    Driver0 = Asc("@")
-    Drivers1And2 = Asc("A")
-    Drivers3And4 = Asc("C")
-    Drivers5And6 = Asc("E")
-    Drivers7And8 = Asc("G")
-    Drivers9And10 = Asc("I")
-    Drivers11And12 = Asc("K")
-    Drivers13And14 = Asc("M")
-    Drivers15And16 = Asc("O")
-    Drivers1And2And3And4 = Asc("Q")
-    Drivers5And6And7And8 = Asc("U")
-    Drivers9And10And11And12 = Asc("Y")
-    Drivers13And14And15And16 = Asc("]")
-    AllDrivers = Asc("_")
+searchableDriverAddresses = "@123456789:;<=>?"
+def getDriverAddress(index):
+    """0x0 <= index <= 0xf"""
+    return searchableDriverAddresses[index]
 
 
 class PortStatuses:
-    """Represents the status of a COM port."""
     # Indicates that there is an active, available Silverpak on this COM port
     AvailableSilverpak = "[available]"
     # Indicates that this COM port does not have an active Silverpak
@@ -736,9 +718,7 @@ class SilverpakConnectionManager:
         self._nextReadWriteTime = time.time() + self.PortDelayUnit * incrementFactor
 
 
-# Friend modules
 # Consts and Functions for internal use
-
 # The beginning of a sent message to a Silverpak23CE.
 DTProtocolTxStartStr = "/"
 # The end of a sent message to a Silverpak23CE.
@@ -751,16 +731,16 @@ DTProtocolRxEndStr = "\x03"
 # DataBits setting for operating a Silverpak23CE over a serial port.
 DTProtocolComDataBits = 8
 # Parity setting for operating a Silverpak23CE over a serial port.
-DTProtocolComParity = IO.Ports.Parity.None
+DTProtocolComParity = serial.PARITY_NONE
 # StopBits setting for operating a Silverpak23CE over a serial port.
-DTProtocolComStopBits = IO.Ports.StopBits.One
+DTProtocolComStopBits = STOPBITS_ONE
 # Handshake setting for operating a Silverpak23CE over a serial port.
 DTProtocolComHandshake = IO.Ports.Handshake.None
 
 # Returns a complete message to write to the Silverpak23CE.
 def GenerateMessage(recipient, commandList):
     """<param name="commandList">Recommended use GenerateCommand() to generate this parameter. Multiple commands can be concatenated and passed as this argument.</param>"""
-    return DTProtocolTxStartStr + GetDriverAddressStr(recipient) + commandList + DTProtocolTxEndStr
+    return DTProtocolTxStartStr + recipient + commandList + DTProtocolTxEndStr
 def GenerateCommand(cmnd, operand=""):
     """Returns a command to pass to GenerateMessage()"""
     return GetCommandStr(cmnd) + operand
@@ -916,7 +896,7 @@ def SearchDriverAddresses(portName, baudRate, driverAddress=SilverpakManager.Def
     if driverAddress == SilverpakManager.DefaultDriverAddress:
         # Search all driver addresses
         portInfo = None
-        for driverAddress in DriverAddresses.searchableValues:
+        for driverAddress in searchableDriverAddresses:
             portInfo = GetSilverpakPortInfo(portName, baudRate, driverAddress)
             if portInfo != None:
                 break
@@ -985,123 +965,80 @@ def GetSilverpakPortInfo(portName, baudRate, driverAddress):
 
 # Friend enums
 class Commands:
-    """All available commands. See Specification Commands for more information."""
+    """
+    All available commands.
+    For more information, see
+    http://www.linengineering.com/LinE/contents/stepmotors/pdf/Silverpak23C-256Commands.pdf
+    """
     # Homing and Positioning
-    # "Z"
-    GoHome = 1
-    # "z"
-    SetPosition = 2
-    # "A"
-    GoAbsolute = 3
-    # "f"
-    SetHomePolarity = 4
-    # "P"
-    GoPositive = 5
-    # "D"
-    GoNegative = 6
-    # "B"
-    SetPulseJogDistance = 7
-    # "T"
-    TerminateCommand = 8
-    # "F"
-    SetMotorPolarity = 9
+    GoHome = "Z"
+    SetPosition = "z"
+    GoAbsolute = "A"
+    SetHomePolarity = "f"
+    GoPositive = "P"
+    GoNegative = "D"
+    SetPulseJogDistance = "B"
+    TerminateCommand = "T"
+    SetMotorPolarity = "F"
 
     # Velocity and Acceleration
-    # "V"
-    SetVelocity = 10
-    # "A"
-    SetAcceleration = 11
+    SetVelocity = "V"
+    SetAcceleration = "L"
 
     # Setting Current
-    # "m"
-    SetRunningCurrent = 12
-    # "h"
-    SetHoldCurrent = 13
+    SetRunningCurrent = "m"
+    SetHoldCurrent = "h"
 
     # Looping and Branching
-    # "g"
-    BeginLoop = 14
-    # "G"
-    EndLoop = 15
-    # "M"
-    Delay = 16
-    # "H"
-    HaltUntil = 17
-    # "S"
-    SkipIf = 18
-    # "n"
-    SetMode = 19
+    BeginLoop = "g"
+    EndLoop = "G"
+    Delay = "M"
+    HaltUntil = "H"
+    SkipIf = "S"
+    SetMode = "n"
 
     # Position Correction - Encoder Option Only
-    # "N"
-    SetEncoderMode = 20
-    # "aC"
-    SetPositionCorrectionTolerance = 21
-    # "aE"
-    SetEncoderRatio = 22
-    # "au"
-    SetPositionCorrectionRetries = 23
-    # "r"
-    RecoverEncoderTimeout = 24
+    SetEncoderMode = "N"
+    SetPositionCorrectionTolerance = "aC"
+    SetEncoderRatio = "aE"
+    SetPositionCorrectionRetries = "au"
+    RecoverEncoderTimeout = "r"
 
     # Program Stroage and Recall
-    # "s"
-    StoreProgram = 25
-    # "e"
-    ExecuteStoredProgram = 26
+    StoreProgram = "s"
+    ExecuteStoredProgram = "e"
 
     # Program Execution
-    # "R"
-    RunCurrentCommand = 27
-    # "X"
-    RepeatCurrentCommand = 28
+    RunCurrentCommand = "R"
+    RepeatCurrentCommand = "X"
 
     # Microstepping
-    # "j"
-    SetMicrostepResolution = 29
-    # "o"
-    SetMicrostepAdjust = 30
+    SetMicrostepResolution = "j"
+    SetMicrostepAdjust = "o"
 
     # On/Off Drivers (Outputs)
-    # "J"
-    SetOutputOnOff = 31
+    SetOutputOnOff = "J"
 
     # Query Commands
-    # "?0"
-    QueryMotorPosition = 32
-    # "?1"
-    QueryStartVelocity = 33
-    # "?2"
-    QuerySlewSpeed = 34
-    # "?3"
-    QueryStopSpeed = 35
-    # "?4"
-    QueryInputs = 36
-    # "?5"
-    QueryCurrentVelocityModeSpeed = 37
-    # "?6"
-    QueryMicrostepSize = 38
-    # "?7"
-    QueryMicrostepAdjust = 39
-    # "?8"
-    QueryEncoderPosition = 40
-    # "?9"
-    ClearMemory = 41
+    QueryMotorPosition = "?0"
+    QueryStartVelocity = "?1"
+    QuerySlewSpeed = "?2"
+    QueryStopSpeed = "?3"
+    QueryInputs = "?4"
+    QueryCurrentVelocityModeSpeed = "?5"
+    QueryMicrostepSize = "?6"
+    QueryMicrostepAdjust = "?7"
+    QueryEncoderPosition = "?8"
+    ClearMemory = "?9"
 
-    # "$"
-    QueryCurrentCommand = 42
-    # "&amp;"
-    QueryFirmwareVersion = 43
-    # "Q"
-    QueryControllerStatus = 44
-    # "T"
-    TerminateCommands = 45
-    # "p"
-    EchoNumber = 46
+    QueryCurrentCommand = "$"
+    QueryFirmwareVersion = "&"
+    QueryControllerStatus = "Q"
+    TerminateCommands = "T"
+    EchoNumber = "p"
 
     # Baud Control
-    # "b"
-    SetBaudRate = 47
+    SetBaudRate = "b"
 
 class MotorStates:
     """States for the motor"""
