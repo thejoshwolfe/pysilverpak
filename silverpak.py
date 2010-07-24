@@ -56,7 +56,7 @@ class SilverpakManager:
         return self._position
 
     def __init__(self):
-        self._connectionManager_motor = SilverpakConnectionManager(m_components)
+        self._connectionManager_motor = SilverpakConnectionManager()
         self.acceleration = self.DefaultAcceleration
         self.baudRate = self.DefaultBaudRate
         self.driverAddress = self.DefaultDriverAddress
@@ -87,7 +87,7 @@ class SilverpakManager:
         # Used to cancel the position updater thread. Part of the lock group: posUpd.
         self._keepPositionUpdaterRunning_posUpd = False
         # Thread that periodically gets the position of the motor. Part of the lock group: posUpd.
-        self._positionUpdaterThread_posUpd = threading.Thread(target=positionUpdater_run)
+        self._positionUpdaterThread_posUpd = threading.Thread(target=self.positionUpdater_run)
 
         # Raised when the connection to the Silverpak23CE is lost.
         self.connectionLostHandler = []
@@ -123,7 +123,7 @@ class SilverpakManager:
             else:
                 # Connection failed
                 return False
-
+    
     def FindAndConnect(self):
         """
         Attempts to find and connect to a Silverpak23CE. 
@@ -136,7 +136,7 @@ class SilverpakManager:
             if self._motorState_motor != MotorStates.Disconnected: raise InvalidSilverpakOperationException("Connection is already active. Make sure the IsActive property returns False before calling this method.")
 
             # Get information for all COM ports being searched
-            portInfos = self.SearchComPorts(self.portName, self.baudRate, self.driverAddress)
+            portInfos = SearchComPorts(self.portName, self.baudRate, self.driverAddress)
             # Search the list of information for an available Silverpak23CE
             for iPI in portInfos:
                 if iPI.PortStatus == PortStatuses.AvailableSilverpak:
@@ -329,7 +329,7 @@ class SilverpakManager:
             m_keepPositionUpdaterRunning_posUpd = True # make sure the position updater thread doesn't cancel
             if not m_positionUpdaterThread_posUpd.IsAlive: # only activate it when it's not active
                 if m_positionUpdaterThread_posUpd.ThreadState == ThreadState.Stopped: # if it's previously completed running
-                    m_positionUpdaterThread_posUpd = Thread(target=positionUpdater_run) # reinstantiate the thread
+                    m_positionUpdaterThread_posUpd = Thread(target=self.positionUpdater_run) # reinstantiate the thread
                 m_positionUpdaterThread_posUpd.Start() # start the thread
 
     def stopPositionUpdater(self):
@@ -337,7 +337,7 @@ class SilverpakManager:
         if threading.current_thread() ==  self._positionUpdaterThread_posUpd:
             # the position updater thread cannot stop itself; a thread can never see itself die.
             # stop the position updater thread on a seperate thread.
-            threading.Thread(target=lambda: self.stopPositionUpdater_not_positionUpdaterThread()).Start()
+            threading.Thread(target=self.stopPositionUpdater_not_positionUpdaterThread).Start()
         else:
             self.stopPositionUpdater_not_positionUpdaterThread()
     def stopPositionUpdater_not_positionUpdaterThread(self):
