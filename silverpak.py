@@ -207,7 +207,7 @@ class SilverpakManager:
             if self._motorState_motor != MotorStates.InitializedSettings: raise InvalidSilverpakOperationException("Initialization methods must be called in the proper order.")
             
             # Send a small motion command five times
-            smoothMotionInitMsg = GenerateMessage(self.driverAddress, GenerateCommand(Commands.GoPositive, "1"))
+            smoothMotionInitMsg = GenerateMessage(self.driverAddress, Commands.GoPositive + "1")
             for _ in range(5):
                 self._connectionManager_motor.Write(smoothMotionInitMsg, 3.0)
             # Update state
@@ -231,9 +231,9 @@ class SilverpakManager:
     
     def moveToZero(self):
         # move to zero in preparation for home calibration
-        cmd = GenerateCommand(Commands.SetPosition, int(self.maxPosition * (self.encoderRatio / 1000.0)))
-        cmd += GenerateCommand(Commands.SetEncoderRatio, self.encoderRatio)
-        cmd += GenerateCommand(Commands.GoAbsolute, 0)
+        cmd = Commands.SetPosition + str(int(self.maxPosition * (self.encoderRatio / 1000.0)))
+        cmd += Commands.SetEncoderRatio + str(self.encoderRatio)
+        cmd += Commands.GoAbsolute + "0"
         message = GenerateMessage(self.driverAddress, cmd)
         self._connectionManager_motor.Write(message, 2.0)
 
@@ -257,7 +257,7 @@ class SilverpakManager:
             if self._motorState_motor == MotorStates.Disconnected: raise InvalidSilverpakOperationException("Connection is not active.")
 
             # Send stop command
-            stopMessage = GenerateMessage(m_driverAddress, GenerateCommand(Commands.TerminateCommand))
+            stopMessage = GenerateMessage(m_driverAddress, Commands.TerminateCommand)
             self._connectionManager_motor.Write(stopMessage, 1.0)
             # Update state if applicable
             if self._motorState_motor in (
@@ -279,7 +279,7 @@ class SilverpakManager:
                 ):
                 raise InvalidSilverpakOperationException("Motor is not fully initialized")
             # Send absolute motion command
-            self._connectionManager_motor.Write(GenerateMessage(self.driverAddress, GenerateCommand(Commands.GoAbsolute, position)), 1.0)
+            self._connectionManager_motor.Write(GenerateMessage(self.driverAddress, Commands.GoAbsolute + str(position)), 1.0)
             # Update state
             self._motorState_motor = MotorStates.Moving
     
@@ -376,8 +376,7 @@ class SilverpakManager:
         callbackAction = None
         try:
             with self._motor_lock:
-                getPositionCmd = GenerateCommand(Commands.QueryMotorPosition)
-                getPositionMessage = GenerateMessage(self.driverAddress, getPositionCmd)
+                getPositionMessage = GenerateMessage(self.driverAddress, Commands.QueryMotorPosition)
                 # make sure we know whether it's been set by starting it at an unlikely value
                 newPosition = None
                 response = None
@@ -411,7 +410,7 @@ class SilverpakManager:
                         else:
                             self._motorState_motor = MotorStates.InitializingCoordinates_calibrateHome
                             # Send the homing message
-                            initCoordMessage = GenerateMessage(self.driverAddress, GenerateCommand(Commands.GoHome, int(self.maxPosition * (self.encoderRatio / 1000.0))))
+                            initCoordMessage = GenerateMessage(self.driverAddress, Commands.GoHome + str(int(self.maxPosition * (self.encoderRatio / 1000.0))))
                             self._connectionManager_motor.Write(initCoordMessage, 1.0)
                             self._homeCalibrationSteps = 0
                     elif self._motorState_motor == MotorStates.InitializingCoordinates_calibrateHome:
@@ -434,7 +433,7 @@ class SilverpakManager:
                         if self._homeCalibrationSteps > 5:
                             # Calling shenanigans on initialization
                             # stop the motor damnit
-                            stopMessage = GenerateMessage(self.driverAddress, GenerateCommand(Commands.TerminateCommand))
+                            stopMessage = GenerateMessage(self.driverAddress, Commands.TerminateCommand)
                             for _ in range(3):
                                 self._connectionManager_motor.Write(stopMessage, 1.0)
                             # crash
@@ -457,23 +456,23 @@ class SilverpakManager:
     
     def generateFullInitCommandList(self):
         """Produces a command list to initialize the motor from scratch."""
-        initMotorSettingsProgramHeader = GenerateCommand(Commands.SetPosition, "0")
+        initMotorSettingsProgramHeader = Commands.SetPosition + "0"
         # Position Correction + Optical Limit Switches
-        initMotorSettingsProgramFooter = GenerateCommand(Commands.SetMode, "10")
+        initMotorSettingsProgramFooter = Commands.SetMode + "10"
         return initMotorSettingsProgramHeader + self.generateResendInitCommandList() + initMotorSettingsProgramFooter
     
     def generateResendInitCommandList(self):
         """Produces a command list to set the adjustable motor settings."""
-        return GenerateCommand(Commands.SetHoldCurrent, self.holdingCurrent) + \
-                GenerateCommand(Commands.SetRunningCurrent, self.runningCurrent) + \
-                GenerateCommand(Commands.SetMotorPolarity, self.motorPolarity) + \
-                GenerateCommand(Commands.SetHomePolarity, self.homePolarity) + \
-                GenerateCommand(Commands.SetPositionCorrectionTolerance, self.positionCorrectionTolerance) + \
-                GenerateCommand(Commands.SetPositionCorrectionRetries, self.positionCorrectionRetries) + \
-                GenerateCommand(Commands.SetEncoderRatio, "1000") + \
-                GenerateCommand(Commands.SetVelocity, self.velocity) + \
-                GenerateCommand(Commands.SetAcceleration, self.acceleration) + \
-                GenerateCommand(Commands.SetEncoderRatio, self.encoderRatio)
+        return Commands.SetHoldCurrent + str(self.holdingCurrent) + \
+                Commands.SetRunningCurrent + str(self.runningCurrent) + \
+                Commands.SetMotorPolarity + str(self.motorPolarity) + \
+                Commands.SetHomePolarity + str(self.homePolarity) + \
+                Commands.SetPositionCorrectionTolerance + str(self.positionCorrectionTolerance) + \
+                Commands.SetPositionCorrectionRetries + str(self.positionCorrectionRetries) + \
+                Commands.SetEncoderRatio + "1000" + \
+                Commands.SetVelocity + str(self.velocity) + \
+                Commands.SetAcceleration + str(self.acceleration) + \
+                Commands.SetEncoderRatio + str(self.encoderRatio)
     
     @staticmethod
     def invokeErrorCallback(ex):
@@ -495,10 +494,10 @@ class PortInformation:
         self.portStatus = portStatus
         self.driverAddress = driverAddress
 
-searchableDriverAddresses = "@123456789:;<=>?"
+allDriverAddresses = "@123456789:;<=>?"
 def getDriverAddress(index):
     """0x0 <= index <= 0xf"""
-    return searchableDriverAddresses[index]
+    return allDriverAddresses[index]
 
 
 class PortStatuses:
@@ -527,9 +526,6 @@ class StoppedMovingReason:
 class SilverpakConnectionManager:
     """Manages the connection to a Silverpak through a serial port."""
 
-    # Public fields
-    # The command string for a safe query.
-    SafeQueryCommandStr = GenerateCommand(Commands.QueryControllerStatus, "")
     # The delay factor for a safe query.
     SafeQueryDelayFactor = 3.0
     # The minimum amount of time in milliseconds to wait for the Silverpak23CE to respond to a command.
@@ -546,7 +542,7 @@ class SilverpakConnectionManager:
         # Lock object for the serial port
         self._srlPort_lock = threading.RLock()
         # The serial port object used to communicate with a Silverpak.
-        self._serialPortInterface_srlPort = InitializeSerialPort(SerialPort(components))
+        self._serialPortInterface_srlPort = InitializeSerialPort(serial.Serial())
 
     # Public methods
     def Connect(self):
@@ -565,7 +561,7 @@ class SilverpakConnectionManager:
                 # Attempt to connect
                 self._serialPortInterface_srlPort.Open()
                 # Check for a Silverpak23CE
-                response = self.writeAndGetResponse_srlPort(GenerateMessage(self.driverAddress, self.SafeQueryCommandStr), self.SafeQueryDelayFactor)
+                response = self.writeAndGetResponse_srlPort(GenerateMessage(self.driverAddress, SafeQueryCommandStr), self.SafeQueryDelayFactor)
                 if response != None:
                     return True
                 else:
@@ -718,111 +714,18 @@ class SilverpakConnectionManager:
         self._nextReadWriteTime = time.time() + self.PortDelayUnit * incrementFactor
 
 
-# Consts and Functions for internal use
-# The beginning of a sent message to a Silverpak23CE.
 DTProtocolTxStartStr = "/"
-# The end of a sent message to a Silverpak23CE.
 DTProtocolTxEndStr = "R\r"
-# The beginning of a received message from a Silverpak23CE.
 DTProtocolRxStartStr = "/0"
-# The end of a received message from a Silverpak23CE.
 DTProtocolRxEndStr = "\x03"
 
-# DataBits setting for operating a Silverpak23CE over a serial port.
 DTProtocolComDataBits = 8
-# Parity setting for operating a Silverpak23CE over a serial port.
 DTProtocolComParity = serial.PARITY_NONE
-# StopBits setting for operating a Silverpak23CE over a serial port.
-DTProtocolComStopBits = STOPBITS_ONE
-# Handshake setting for operating a Silverpak23CE over a serial port.
-DTProtocolComHandshake = IO.Ports.Handshake.None
+DTProtocolComStopBits = serial.STOPBITS_ONE
 
 # Returns a complete message to write to the Silverpak23CE.
 def GenerateMessage(recipient, commandList):
-    """<param name="commandList">Recommended use GenerateCommand() to generate this parameter. Multiple commands can be concatenated and passed as this argument.</param>"""
     return DTProtocolTxStartStr + recipient + commandList + DTProtocolTxEndStr
-def GenerateCommand(cmnd, operand=""):
-    """Returns a command to pass to GenerateMessage()"""
-    return GetCommandStr(cmnd) + operand
-
-def GetDriverAddressStr(driver):
-    """Returns the character to use in GenerateMessage()"""
-    return chr(driver)
-
-def GetCommandStr(command):
-    """Returns the string used in GenerateCommand()"""
-    return {
-        # Homing and Positioning
-        Commands.GoHome: "Z",
-        Commands.SetPosition: "z",
-        Commands.GoAbsolute: "A",
-        Commands.SetHomePolarity: "f",
-        Commands.GoPositive: "P",
-        Commands.GoNegative: "D",
-        Commands.SetPulseJogDistance: "B",
-        Commands.TerminateCommand: "T",
-        Commands.SetMotorPolarity: "F",
-
-        # Velocity and Acceleration
-        Commands.SetVelocity: "V",
-        Commands.SetAcceleration: "L",
-
-        # Setting Current
-        Commands.SetRunningCurrent: "m",
-        Commands.SetHoldCurrent: "h",
-
-        # Looping and Branching
-        Commands.BeginLoop: "g",
-        Commands.EndLoop: "G",
-        Commands.Delay: "M",
-        Commands.HaltUntil: "H",
-        Commands.SkipIf: "S",
-        Commands.SetMode: "n",
-
-        # Position Correction - Encoder Option Only
-        Commands.SetEncoderMode: "N",
-        Commands.SetPositionCorrectionTolerance: "aC",
-        Commands.SetEncoderRatio: "aE",
-        Commands.SetPositionCorrectionRetries: "au",
-        Commands.RecoverEncoderTimeout: "r",
-
-        # Program Stroage and Recall
-        Commands.StoreProgram: "s",
-        Commands.ExecuteStoredProgram: "e",
-
-        # Program Execution
-        Commands.RunCurrentCommand: "R",
-        Commands.RepeatCurrentCommand: "X",
-
-        # Microstepping
-        Commands.SetMicrostepResolution: "j",
-        Commands.SetMicrostepAdjust: "o",
-
-        # On/Off Drivers (Outputs)
-        Commands.SetOutputOnOff: "J",
-
-        # Query Commands
-        Commands.QueryMotorPosition: "?0",
-        Commands.QueryStartVelocity: "?1",
-        Commands.QuerySlewSpeed: "?2",
-        Commands.QueryStopSpeed: "?3",
-        Commands.QueryInputs: "?4",
-        Commands.QueryCurrentVelocityModeSpeed: "?5",
-        Commands.QueryMicrostepSize: "?6",
-        Commands.QueryMicrostepAdjust: "?7",
-        Commands.QueryEncoderPosition: "?8",
-        Commands.ClearMemory: "?9",
-
-        Commands.QueryCurrentCommand: "$",
-        Commands.QueryFirmwareVersion: "&",
-        Commands.QueryControllerStatus: "Q",
-        Commands.TerminateCommands: "T",
-        Commands.EchoNumber: "p",
-
-        # Baud Control
-        Commands.SetBaudRate: "b",
-    }[command]
-
 
 # Evaluates an RX string received from the Silverpak and returns whether the RX message is complete and valid.
 def IsRxDataComplete(rxData):
@@ -841,11 +744,10 @@ def TrimRxData(rxData):
     return fstTrim[:fstTrim.find(DTProtocolRxEndStr)]
 
 def InitializeSerialPort(srlPort):
-    """Sets the DataBits, Parity, StopBits, and Handshake properties of the passed SerialPort object in accordance with DT Protocol."""
-    srlPort.DataBits = DTProtocolComDataBits
-    srlPort.Parity = DTProtocolComParity
-    srlPort.StopBits = DTProtocolComStopBits
-    srlPort.Handshake = DTProtocolComHandshake
+    """Configures non-variable properties of the passed serial port object in accordance with DT Protocol."""
+    srlPort.bytesize = DTProtocolComDataBits
+    srlPort.parity = DTProtocolComParity
+    srlPort.stopbits = DTProtocolComStopBits
     return srlPort
 
 def SearchComPorts(portName=SilverpakManager.DefaultPortname, baudRate=SilverpakManager.DefaultBaudRate, driverAddress=SilverpakManager.DefaultDriverAddress):
@@ -896,7 +798,7 @@ def SearchDriverAddresses(portName, baudRate, driverAddress=SilverpakManager.Def
     if driverAddress == SilverpakManager.DefaultDriverAddress:
         # Search all driver addresses
         portInfo = None
-        for driverAddress in searchableDriverAddresses:
+        for driverAddress in allDriverAddresses:
             portInfo = GetSilverpakPortInfo(portName, baudRate, driverAddress)
             if portInfo != None:
                 break
@@ -912,58 +814,57 @@ def GetSilverpakPortInfo(portName, baudRate, driverAddress):
     Returns null instead of a PortInformation with .PortStatus = Empty.
     This method can raise an ArgumentOutOfRangeException or an ArgumentException if passed values are invalid.
     """
-    with InitializeSerialPort(SerialPort()) as sp:
-        # set SerialPort parameters and allow exceptions to bubble out
-        sp.PortName = portName
-        sp.BaudRate = baudRate
+    sp = InitializeSerialPort(serial.Serial())
+    # set SerialPort parameters and allow exceptions to bubble out
+    sp.port = portName
+    sp.baudrate = baudRate
 
-        # delay if this method has been called recently
-        time.sleep(Math.Max(0, _nextSerialPortTime - time.time()))
-        _nextSerialPortTime = time.time() + SilverpakConnectionManager.PortDelayUnit
+    # delay if this method has been called recently
+    time.sleep(Math.Max(0, _nextSerialPortTime - time.time()))
+    _nextSerialPortTime = time.time() + SilverpakConnectionManager.PortDelayUnit
 
-        # test the COM port
+    # test the COM port
+    try:
+        # Open the serial port. can raise UnauthorizedAccessException
+        sp.Open()
+        # Write a safe query. can raise IOException
+        sp.Write(GenerateMessage(driverAddress, SafeQueryCommandStr))
+        # read response
+        # accumulates chunks of RX data
+        totalRx = ""
+        while True:
+            # wait for a chunk to be written to the read buffer
+            time.sleep(SilverpakConnectionManager.PortDelayUnit)
+            # retrieve any data from the read buffer
+            newRx = sp.ReadExisting
+            if newRx == "":
+                # abort if no data was written
+                return None
+            totalRx += newRx
+            # check to see if the RX data is complete
+            if IsRxDataComplete(totalRx):
+                break
+        # success
+        return PortInformation(
+            portName=portName,
+            baudRate=baudRate,
+            driverAddress=driverAddress,
+            portStatus=PortStatuses.AvailableSilverpak,
+        )
+    except UnauthorizedAccessException:
+        # Port was already open
+        return PortInformation(portName=portName, portStatus=PortStatuses.Busy)
+    except IO.IOException:
+        # Port was invalid (such as a Bluetooth virtual COM port)
+        return PortInformation(portName=portName, portStatus=PortStatuses.Invalid)
+    finally:
+        # make sure the port is closed
         try:
-            # Open the serial port. can raise UnauthorizedAccessException
-            sp.Open()
-            # Write a safe query. can raise IOException
-            sp.Write(GenerateMessage(driverAddress, SilverpakConnectionManager.SafeQueryCommandStr))
-            # read response
-            # accumulates chunks of RX data
-            totalRx = ""
-            while True:
-                # wait for a chunk to be written to the read buffer
-                time.sleep(SilverpakConnectionManager.PortDelayUnit)
-                # retrieve any data from the read buffer
-                newRx = sp.ReadExisting
-                if newRx == "":
-                    # abort if no data was written
-                    return None
-                totalRx += newRx
-                # check to see if the RX data is complete
-                if IsRxDataComplete(totalRx):
-                    break
-            # success
-            return PortInformation(
-                portName=portName,
-                baudRate=baudRate,
-                driverAddress=driverAddress,
-                portStatus=PortStatuses.AvailableSilverpak,
-            )
-        except UnauthorizedAccessException:
-            # Port was already open
-            return PortInformation(portName=portName, portStatus=PortStatuses.Busy)
-        except IO.IOException:
-            # Port was invalid (such as a Bluetooth virtual COM port)
-            return PortInformation(portName=portName, portStatus=PortStatuses.Invalid)
-        finally:
-            # make sure the port is closed
-            try:
-                if sp.IsOpen: sp.Close()
-            except:
-                pass
+            if sp.IsOpen: sp.Close()
+        except:
+            pass
 
 
-# Friend enums
 class Commands:
     """
     All available commands.
@@ -1039,6 +940,10 @@ class Commands:
 
     # Baud Control
     SetBaudRate = "b"
+
+# a safe query.
+SafeQueryCommandStr = Commands.QueryControllerStatus
+
 
 class MotorStates:
     """States for the motor"""
