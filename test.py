@@ -1,9 +1,15 @@
 
+import sys
 import silverpak
 
-motor = silverpak.SilverpakManager()
-motor.baudRate = 9600
-motor.driverAddress = silverpak.getDriverAddress(1)
+def main():
+    motor = silverpak.SilverpakManager()
+    motor.baudRate = 9600
+    motor.driverAddress = silverpak.getDriverAddress(1)
+    
+    if not motor.FindAndConnect():
+        sys.exit("no silverpak found")
 
-print(motor.FindAndConnect())
 
+if __name__ == "__main__":
+    main()

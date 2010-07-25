@@ -17,15 +17,16 @@ import time, threading
 try:
     import serial
 except ImportError:
-    sys.stderr.write("\ninstall this: http://pyserial.sourceforge.net/\n\n")
+    sys.stderr.write("\ninstall pyserial-py3k-2.5-rc1.win32.exe\n\n")
     raise
 
-__all__ = ["SilverpakManager", "getDriverAddress"]
+__all__ = []
 
-# Public classes
+
+__all__.append("SilverpakManager")
 class SilverpakManager:
     """Provides an interface to a Lin Engineering Silverpak stepper motor"""
-
+    
     # Public Fields
     DefaultAcceleration = 500
     DefaultBaudRate = -1
@@ -55,7 +56,7 @@ class SilverpakManager:
             return self._motorState_motor == MotorStates.Ready
     def position(self):
         return self._position
-
+    
     def __init__(self):
         self._connectionManager_motor = SilverpakConnectionManager()
         self.acceleration = self.DefaultAcceleration
@@ -135,7 +136,7 @@ class SilverpakManager:
         with self._motor_lock:
             # Validate state
             if self._motorState_motor != MotorStates.Disconnected: raise InvalidSilverpakOperationException("Connection is already active. Make sure the IsActive property returns False before calling this method.")
-
+            
             # Get information for all COM ports being searched
             portInfos = SearchComPorts(self.portName, self.baudRate, self.driverAddress)
             # Search the list of information for an available Silverpak
@@ -480,10 +481,11 @@ class SilverpakManager:
     def invokeErrorCallback(ex):
         """Invokes the ErrorCalback delegate if it has been set. Otherwise, re-throws the exception so that the program crashes."""
         if SilverpakManager.errorCallback != None:
-            SilverpakManager.errorCallback.Invoke(ex)
+            SilverpakManager.errorCallback(ex)
         else:
             raise ex
 
+__all__.append("InvalidSilverpakOperationException")
 class InvalidSilverpakOperationException(Exception):
     """The exception that is thrown when a method call in namespace Silverpak is invalid for the object's current state."""
 
@@ -498,7 +500,10 @@ class PortInformation:
     def __repr__(self):
         return "PortInformation({0})".format(", ".join("{0}={1}".format(*pair) for pair in self.__dict__.items()))
 
+
 allDriverAddresses = "@123456789:;<=>?"
+
+__all__.append("getDriverAddress")
 def getDriverAddress(index):
     """0x0 <= index <= 0xf"""
     return allDriverAddresses[index]
@@ -515,6 +520,7 @@ class PortStatuses:
     Busy = "[busy]"
 
 
+__all__.append("StoppedMovingReason")
 class StoppedMovingReason:
     """Represents the reason that the motor stopped moving."""
     # The motor stopped after a GoInfinite() or GoToPosition() command.
@@ -831,7 +837,7 @@ def GetSilverpakPortInfo(portName, baudRate, driverAddress):
         # Open the serial port. can raise UnauthorizedAccessException
         sp.open()
         # Write a safe query. can raise IOException
-        sp.write(GenerateMessage(driverAddress, SafeQueryCommandStr))
+        sp.write(bytes(GenerateMessage(driverAddress, SafeQueryCommandStr), "utf8"))
         # read response
         # accumulates chunks of RX data
         totalRx = ""
@@ -839,7 +845,7 @@ def GetSilverpakPortInfo(portName, baudRate, driverAddress):
             # wait for a chunk to be written to the read buffer
             time.sleep(SilverpakConnectionManager.PortDelayUnit)
             # retrieve any data from the read buffer
-            newRx = sp.read(1)
+            newRx = str(sp.read(1), "utf8")
             if newRx == "":
                 # abort if no data was written
                 return None
@@ -857,9 +863,6 @@ def GetSilverpakPortInfo(portName, baudRate, driverAddress):
     except serial.serialutil.SerialException as ex:
         # TODO: refine this error checking
         return PortInformation(portName=portName, portStatus=PortStatuses.Invalid)
-    except Exception as ex:
-        print(list(sys.exc_info()))
-        return None
     finally:
         # make sure the port is closed
         try:
