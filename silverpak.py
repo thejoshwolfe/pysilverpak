@@ -1,7 +1,12 @@
 """
 module for controlling a Silverpak stepper motor over a serial port in Windows.
 
-supported devices:
+Note: this module doesn't work yet.
+
+this module requires pyserial for python 3. 
+pyserial-py3k-2.5-rc1.win32.exe works.
+
+supported (eventually) devices:
  - Silverpak 23CE
    - http://www.linengineering.com/LinE/contents/stepmotors/SilverPak_23CE.aspx
    - http://www.linengineering.com/LinE/contents/stepmotors/pdf/Silverpak23C-R356Commands.pdf
@@ -12,15 +17,10 @@ supported devices:
 
 import sys
 import time, threading
+import serial
 
-try:
-    import serial
-except ImportError:
-    sys.stderr.write("\ninstall pyserial-py3k-2.5-rc1.win32.exe\n\n")
-    raise
 
 __all__ = []
-
 
 __all__.append("Silverpak")
 class Silverpak:
