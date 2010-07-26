@@ -50,7 +50,7 @@ class Silverpak:
         with self._motor_lock:
             return self._motorState_motor != MotorStates.Disconnected
     def isReady(self):
-        """Returns a value indicating whether the motor is ready to accept a command (i.e. connected, initialized, and stopped)"""
+        """whether the motor is ready to accept a command. i.e. connected, initialized, and stopped."""
         with self._motor_lock:
             return self._motorState_motor == MotorStates.Ready
     def position(self):
@@ -196,12 +196,7 @@ class Silverpak:
         with self._motor_lock:
             # Validate state
             if self._motorState_motor == MotorStates.Disconnected: raise InvalidSilverpakOperationException("Connection is not active.")
-            if self._motorState_motor in (
-                    MotorStates.InitializingCoordinates_moveToZero,
-                    MotorStates.InitializingCoordinates_calibrateHome,
-                    MotorStates.Moving,
-                ):
-                raise InvalidSilverpakOperationException("Cannot resend motor settings while the motor is moving.")
+            if self._motorState_motor in MotorStates.movingStates: raise InvalidSilverpakOperationException("Cannot resend motor settings while the motor is moving.")
             # Send settings command
             self._connectionManager_motor.write(GenerateMessage(self.driverAddress, self._generateResendInitCommandList()), 4.0)
     
@@ -256,7 +251,7 @@ class Silverpak:
         """
         self.goToPosition({True: self.maxPosition, False: 0}[positive])
     
-    def stopMotor(self):
+    def stop(self):
         """
         Stops the motor.
         Calling this method when the isActive property returns False will raise an InvalidSilverpakOperationException.
@@ -328,8 +323,13 @@ class Silverpak:
     
     # Private methods
     def dispose(self):
-        """Disposes this component."""
-        self._stopPositionUpdater()
+        """cleans up and shuts down. it is always safe to call this method"""
+        with self._motor_lock:
+            if self._motorState_motor in MotorStates.movingStates:
+                self._connectionManager_motor.write(GenerateMessage(self.driverAddress, Commands.TerminateCommand), 1.0)
+            self._stopPositionUpdater()
+            self._connectionManager_motor.disconnect()
+            self._motorState_motor = MotorStates.Disconnected
     def __del__(self):
         """in case users don't dispose this object properly"""
         self._keepPositionUpdaterRunning_posUpd = False
@@ -345,14 +345,15 @@ class Silverpak:
     
     def _stopPositionUpdater(self):
         """Stops the position updater thread and makes sure it dies."""
-        if self._positionUpdaterThread_posUpd == None:
-            return
-        if threading.current_thread() ==  self._positionUpdaterThread_posUpd:
-            # the position updater thread cannot stop itself; a thread can never see itself die.
-            # stop the position updater thread on a seperate thread.
-            threading.Thread(target=self._stopPositionUpdater_not_positionUpdaterThread).start()
-        else:
-            self._stopPositionUpdater_not_positionUpdaterThread()
+        with self._posUpd_lock:
+            if self._positionUpdaterThread_posUpd == None:
+                return
+            if threading.current_thread() ==  self._positionUpdaterThread_posUpd:
+                # the position updater thread cannot stop itself; a thread can never see itself die.
+                # stop the position updater thread on a seperate thread.
+                threading.Thread(target=self._stopPositionUpdater_not_positionUpdaterThread).start()
+            else:
+                self._stopPositionUpdater_not_positionUpdaterThread()
     def _stopPositionUpdater_not_positionUpdaterThread(self):
         """Stops the position updater thread and makes sure it dies. This method cannot be called on the position updater thread."""
         try:
@@ -534,7 +535,7 @@ class StoppedMovingReason:
     Normal = "[normal]"
     # The initializeCoordinates() command has completed without being interrupted.
     Initialized = "[init]"
-    # The initializeCoordinates() command is aborted by calling the stopMotor() method.
+    # The initializeCoordinates() command is aborted by calling the stop() method.
     InitializationAborted = "[init_abort]"
 
 
@@ -973,5 +974,10 @@ class MotorStates:
     # In the process of moving.
     Moving = "[Moving]"
 
+    movingStates = (
+        InitializingCoordinates_moveToZero,
+        InitializingCoordinates_calibrateHome,
+        Moving,
+    )
 
 
