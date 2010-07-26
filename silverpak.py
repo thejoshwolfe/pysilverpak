@@ -1,11 +1,10 @@
 """
-
-module for controlling a Silverpak stepper motor over a serial port.
+module for controlling a Silverpak stepper motor over a serial port in Windows.
 
 supported devices:
  - Silverpak 23CE
    - http://www.linengineering.com/LinE/contents/stepmotors/SilverPak_23CE.aspx
-   - http://www.linengineering.com/LinE/contents/stepmotors/pdf/Silverpak17C-256uStepping.pdf
+   - http://www.linengineering.com/LinE/contents/stepmotors/pdf/Silverpak23C-R356Commands.pdf
  - Silverpak 17CE
    - http://www.linengineering.com/LinE/contents/stepmotors/SilverPak_17CE.aspx
    - http://www.linengineering.com/LinE/contents/stepmotors/pdf/Silverpak17C-256uStepping.pdf
@@ -23,8 +22,8 @@ except ImportError:
 __all__ = []
 
 
-__all__.append("SilverpakManager")
-class SilverpakManager:
+__all__.append("Silverpak")
+class Silverpak:
     """Provides an interface to a Lin Engineering Silverpak stepper motor"""
     
     # Public Fields
@@ -47,7 +46,7 @@ class SilverpakManager:
     errorCallback = None
     
     def IsActive(self):
-        """Returns a value indicating whether this SilverpakManager is actively connected to a Silverpak"""
+        """Returns a value indicating whether this Silverpak is actively connected to a Silverpak"""
         with self._motor_lock:
             return self._motorState_motor != MotorStates.Disconnected
     def IsReady(self):
@@ -90,7 +89,8 @@ class SilverpakManager:
         self._keepPositionUpdaterRunning_posUpd = False
         # Thread that periodically gets the position of the motor. Part of the lock group: posUpd.
         self._positionUpdaterThread_posUpd = threading.Thread(target=self.positionUpdater_run)
-
+        self._positionUpdaterThread_posUpd.daemon = True
+        
         # Raised when the connection to the Silverpak is lost.
         self.connectionLostHandler = []
         # Raised when the motor stops moving.
@@ -98,6 +98,9 @@ class SilverpakManager:
         # Raised when the motor's position changes. Read the Position property to get the position.
         self.positionChangedHandler = []
 
+        self._homeCalibrationSteps = 0
+        self._failCount = 0
+    
     # Public methods
     def Connect(self):
         """
@@ -161,11 +164,11 @@ class SilverpakManager:
                 return True
             # End of list was reached and no available Silverpak was found
             return False
-
+    
     def InitializeMotorSettings(self):
         """
         Initialization Step 1. 
-        This method will set the motor settings as specified by this SilverpakManager's properties.
+        This method will set the motor settings as specified by this Silverpak's properties.
         This method does not cause the motor to move.
         The next step is InitializeSmoothMotion().
         Calling this method out of order will raise an InvalidSilverpakOperationException.
@@ -227,12 +230,11 @@ class SilverpakManager:
         with self._motor_lock:
             # Validate state
             if self._motorState_motor != MotorStates.InitializedSmoothMotion: raise InvalidSilverpakOperationException("Initialization methods must be called in the proper order.")
-
-            self.moveToZero()
+            self._moveToZero()
         # Now that the motor is moving, begin listening for position changes
-        self.startPositionUpdater()
+        self._startPositionUpdater()
     
-    def moveToZero(self):
+    def _moveToZero(self):
         # move to zero in preparation for home calibration
         cmd = Commands.SetPosition + str(int(self.maxPosition * (self.encoderRatio / 1000.0)))
         cmd += Commands.SetEncoderRatio + str(self.encoderRatio)
@@ -322,25 +324,28 @@ class SilverpakManager:
         self._notify(self.stoppedMovingHandlers, StoppedMovingReason.Normal)
     
     # Private methods
-    def Dispose(self):
+    def dispose(self):
         """Disposes this component."""
         self.stopPositionUpdater()
+    def __del__(self):
+        """in case users don't dispose this object properly"""
+        self._keepPositionUpdaterRunning_posUpd = False
     
     # Makes sure the position updater thread is running.
-    def startPositionUpdater(self):
+    def _startPositionUpdater(self):
         with m_posUpd_lock:
             m_keepPositionUpdaterRunning_posUpd = True # make sure the position updater thread doesn't cancel
             if not m_positionUpdaterThread_posUpd.IsAlive: # only activate it when it's not active
                 if m_positionUpdaterThread_posUpd.ThreadState == ThreadState.Stopped: # if it's previously completed running
                     m_positionUpdaterThread_posUpd = Thread(target=self.positionUpdater_run) # reinstantiate the thread
                 m_positionUpdaterThread_posUpd.Start() # start the thread
-
+    
     def stopPositionUpdater(self):
         """Stops the position updater thread and makes sure it dies."""
         if threading.current_thread() ==  self._positionUpdaterThread_posUpd:
             # the position updater thread cannot stop itself; a thread can never see itself die.
             # stop the position updater thread on a seperate thread.
-            threading.Thread(target=self.stopPositionUpdater_not_positionUpdaterThread).Start()
+            threading.Thread(target=self.stopPositionUpdater_not_positionUpdaterThread).start()
         else:
             self.stopPositionUpdater_not_positionUpdaterThread()
     def stopPositionUpdater_not_positionUpdaterThread(self):
@@ -349,16 +354,11 @@ class SilverpakManager:
             with self._posUpd_lock:
                 # cancel the position updater
                 self._keepPositionUpdaterRunning_posUpd = False
-                if self._positionUpdaterThread_posUpd != None:
-                    timeoutTime = time.time() + 1.0
-                    while self._positionUpdaterThread_posUpd.is_alive():
-                        time.sleep(0.1)
-                        if timeoutTime <= time.time():
-                            break
-                    # make sure the position updater thread dies before releasing the lock
+                # make sure the position updater thread dies before releasing the lock
+                self._positionUpdaterThread_posUpd.join(1.0)
         except Exception as ex:
-            SilverpakManager.invokeErrorCallback(ex)
-
+            Silverpak.invokeErrorCallback(ex)
+    
     def positionUpdater_run(self):
         """Method that the position getter thread runs."""
         try:
@@ -369,11 +369,11 @@ class SilverpakManager:
                 # Update postion
                 self.updatePosition()
                 # Wait for the next iteration time
-                time.sleep(max(0, nextIterationTime - time.time()))
+                time.sleep(max(0.0, nextIterationTime - time.time()))
         except Exception as ex:
-            SilverpakManager.invokeErrorCallback(ex)
+            Silverpak.invokeErrorCallback(ex)
     
-    def updatePosition():
+    def updatePosition(self):
         """Updates the Position property by querying the position of the motor."""
         # store a function to call after the lock has been released
         callbackAction = None
@@ -384,14 +384,9 @@ class SilverpakManager:
                 newPosition = None
                 response = None
                 try:
-                    self._homeCalibrationSteps
-                except AttributeError:
-                    self._homeCalibrationSteps = 0
-                    self._failCount = 0
-                try:
                     response = self._connectionManager_motor.WriteAndGetResponse(getPositionMessage, 1.0)
                 except InvalidSilverpakOperationException:
-                    # the SilverpakManager's been disconnected
+                    # the Silverpak's been disconnected
                     # shut down updater thread
                     callbackAction = self.stopPositionUpdater
                     return
@@ -409,7 +404,7 @@ class SilverpakManager:
                     if self._motorState_motor == MotorStates.InitializingCoordinates_moveToZero:
                         # wait! sometimes the motor will stop at 5000000 and lie about being at the top (stupid old firmware)
                         if abs(m_position - 5000000) < 100:
-                            self.moveToZero()
+                            self._moveToZero()
                         else:
                             self._motorState_motor = MotorStates.InitializingCoordinates_calibrateHome
                             # Send the homing message
@@ -480,10 +475,16 @@ class SilverpakManager:
     @staticmethod
     def invokeErrorCallback(ex):
         """Invokes the ErrorCalback delegate if it has been set. Otherwise, re-throws the exception so that the program crashes."""
-        if SilverpakManager.errorCallback != None:
-            SilverpakManager.errorCallback(ex)
+        if Silverpak.errorCallback != None:
+            Silverpak.errorCallback(ex)
         else:
             raise ex
+
+
+def printTraceback(ex):
+    import traceback
+    traceback.print_exception(type(ex), ex, ex.__traceback__)
+
 
 __all__.append("InvalidSilverpakOperationException")
 class InvalidSilverpakOperationException(Exception):
@@ -535,25 +536,26 @@ class StoppedMovingReason:
 
 class SilverpakConnectionManager:
     """Manages the connection to a Silverpak through a serial port."""
-
+    
     # The delay factor for a safe query.
     SafeQueryDelayFactor = 3.0
     # The minimum amount of time in seconds to wait for the Silverpak to respond to a command.
     PortDelayUnit = 0.05
-
+    
     # Public properties
-
+    
     # Public constructors
     def __init__(self):
         self.portName = None
         self.baudRate = 0
         self.driverAddress = None
-
+        
         # Lock object for the serial port
         self._srlPort_lock = threading.RLock()
         # The serial port object used to communicate with a Silverpak.
         self._serialPortInterface_srlPort = makeSerialPort()
-
+    
+        self._nextReadWriteTime = time.time()
     # Public methods
     def Connect(self):
         """
@@ -563,13 +565,13 @@ class SilverpakConnectionManager:
         """
         with self._srlPort_lock:
             # Validate SerialPort state
-            if self._serialPortInterface_srlPort.IsOpen: raise InvalidSilverpakOperationException("Already connected.")
+            if self._serialPortInterface_srlPort.isOpen(): raise InvalidSilverpakOperationException("Already connected.")
             try: # except all expected exceptions
                 # apply serial port settings
-                self._serialPortInterface_srlPort.PortName = m_portName
-                self._serialPortInterface_srlPort.BaudRate = m_baudRate
+                self._serialPortInterface_srlPort.port = m_portName
+                self._serialPortInterface_srlPort.baudrate = m_baudRate
                 # Attempt to connect
-                self._serialPortInterface_srlPort.Open()
+                self._serialPortInterface_srlPort.open()
                 # Check for a Silverpak
                 response = self.writeAndGetResponse_srlPort(GenerateMessage(self.driverAddress, SafeQueryCommandStr), self.SafeQueryDelayFactor)
                 if response != None:
@@ -601,7 +603,7 @@ class SilverpakConnectionManager:
         """
         with m_srlPort_lock:
             # Validate state
-            if not self._serialPortInterface_srlPort.IsOpen: raise InvalidSilverpakOperationException()
+            if not self._serialPortInterface_srlPort.isOpen(): raise InvalidSilverpakOperationException()
             # write message
             self.write_srlPort(completeMessage, delayFactor)
 
@@ -621,11 +623,11 @@ class SilverpakConnectionManager:
             return self.writeAndGetResponse_srlPort(completeMessage, delayFactor)
 
     def closeSerialPort_srlPort(self):
-        if not self._serialPortInterface_srlPort.IsOpen:
+        if not self._serialPortInterface_srlPort.isOpen():
             return
         try:
             # Close the serial port.
-            self._serialPortInterface_srlPort.Close()
+            self._serialPortInterface_srlPort.close()
         except:
             # Ignore any exceptions that occure while closing.
             pass
@@ -684,7 +686,7 @@ class SilverpakConnectionManager:
         # wait for safe read/write
         self.waitForSafeReadWrite_srlPort(delayFactor)
         try:
-            return self._serialPortInterface_srlPort.ReadExisting()
+            return self._serialPortInterface_srlPort.read()
         except:
             # except any undocumented exceptions from SerialPort.ReadExisting()
             return None
@@ -701,9 +703,10 @@ class SilverpakConnectionManager:
         # wait for safe read/write
         self.waitForSafeReadWrite_srlPort(delayFactor)
         try:
-            self._serialPortInterface_srlPort.Write(completeMessage)
-        except:
-            # except any undocumented exceptions from SerialPort.Write()
+            self._serialPortInterface_srlPort.write(bytes(completeMessage, "utf8"))
+        except Exception as ex:
+            # except any undocumented exceptions from writing
+            printTraceback(ex)
             pass
 
     def waitForSafeReadWrite_srlPort(self, incrementFactor):
@@ -714,10 +717,6 @@ class SilverpakConnectionManager:
         expressed as a multiple of PortDelatUnit, typically 1.0.</param>
         """
         # stores the next time that interaction with the Silverpak is safe
-        try:
-            self._nextReadWriteTime
-        except AttributeError:
-            self._nextReadWriteTime = time.time()
         # wait until next read write time
         time.sleep(max(0, self._nextReadWriteTime - time.time()))
         # increment next read write time
@@ -762,58 +761,59 @@ def makeSerialPort():
     srlPort.stopbits = DTProtocolComStopBits
     return srlPort
 
-def SearchComPorts(portName=SilverpakManager.DefaultPortname, baudRate=SilverpakManager.DefaultBaudRate, driverAddress=SilverpakManager.DefaultDriverAddress):
+def SearchComPorts(portName=Silverpak.DefaultPortname, baudRate=Silverpak.DefaultBaudRate, driverAddress=Silverpak.DefaultDriverAddress):
     """
-    Searches for available Silverpak's and returns a PortInformation class for every serached COM port.
+    Searches for available Silverpaks and returns a PortInformation class for every serached COM port.
     if any parameters are not set, all possible values for the parameters will be attempted.
     This method can raise an ArgumentOutOfRangeException or an ArgumentException if passed values are invalid.
     """
-    if portName == SilverpakManager.DefaultPortname:
+    if portName == Silverpak.DefaultPortname:
         # Search all COM ports
-        allPortNames = ["COM%i" % i for i in range(1, 9)] 
-        return [SearchBaudRates(portName, baudRate, driverAddress) for portName in allPortNames]
+        portNames = ["COM%i" % i for i in range(1, 10)]
     else:
         # Search a specific COM port
-        return [SearchBaudRates(portName, baudRate, driverAddress)]
+        portNames = [portName]
+    return [SearchBaudRates(portName, baudRate, driverAddress) for portName in portNames]
 
-def SearchBaudRates(portName, baudRate=SilverpakManager.DefaultBaudRate, driverAddress=SilverpakManager.DefaultDriverAddress):
+def SearchBaudRates(portName, baudRate=Silverpak.DefaultBaudRate, driverAddress=Silverpak.DefaultDriverAddress):
     """
     Searches for an available Silverpak at the specified COM port.
     if any parameters are not set, all possible values for the parameters will be attempted.
     This method can raise an ArgumentOutOfRangeException or an ArgumentException if passed values are invalid.
     """
     portInfo = None
-    if baudRate == SilverpakManager.DefaultBaudRate:
+    if baudRate == Silverpak.DefaultBaudRate:
         # Search all baud rates
-        for baudRate in (9600, 19200, 38400):
-            portInfo = SearchDriverAddresses(portName, baudRate, driverAddress)
-            if portInfo != None:
-                break
+        baudRates = [9600, 19200, 38400]
     else:
         # Search specific baud rate
+        baudRates = [baudRate]
+    for baudRate in baudRates:
         portInfo = SearchDriverAddresses(portName, baudRate, driverAddress)
+        if portInfo != None:
+            break
     if portInfo == None:
         portInfo = PortInformation(portName=portName, portStatus = PortStatuses.Empty)
     return portInfo
 
-def SearchDriverAddresses(portName, baudRate, driverAddress=SilverpakManager.DefaultDriverAddress):
+def SearchDriverAddresses(portName, baudRate, driverAddress=Silverpak.DefaultDriverAddress):
     """
     Searches for an available Silverpak at the specified COM port with the specified baud rate.
     if any parameters are not set, all possible values for the parameters will be attempted.
     Returns null instead of a PortInformation with .PortStatus = Empty.
     This method can raise an ArgumentOutOfRangeException or an ArgumentException if passed values are invalid.
     """
-    if driverAddress == SilverpakManager.DefaultDriverAddress:
+    if driverAddress == Silverpak.DefaultDriverAddress:
         # Search all driver addresses
-        portInfo = None
-        for driverAddress in allDriverAddresses:
-            portInfo = GetSilverpakPortInfo(portName, baudRate, driverAddress)
-            if portInfo != None:
-                break
-        return portInfo
+        driverAddresses = allDriverAddresses
     else:
         # Search specified driver address
-        return GetSilverpakPortInfo(portName, baudRate, driverAddress)
+        driverAddresses = [driverAddress]
+    for driverAddress in driverAddresses:
+        portInfo = GetSilverpakPortInfo(portName, baudRate, driverAddress)
+        if portInfo != None:
+            return portInfo
+    return None
 
 _nextSerialPortTime = time.time()
 def GetSilverpakPortInfo(portName, baudRate, driverAddress):
