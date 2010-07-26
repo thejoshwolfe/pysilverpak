@@ -1,5 +1,6 @@
 """
-module for controlling a Silverpak stepper motor over a serial port in Windows.
+module for controlling a Silverpak stepper motor over a serial port in Windows
+with python 3.
 
 Note: this module doesn't work yet.
 
