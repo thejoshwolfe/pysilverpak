@@ -584,7 +584,7 @@ class SilverpakConnectionManager:
                 response = self.writeAndGetResponse_srlPort(GenerateMessage(self.driverAddress, SafeQueryCommandStr), self.SafeQueryDelayFactor)
                 if response != None:
                     return True
-            except serial.serialutil.SerialException as ex:
+            except serial.serialutil.SerialException:
                 pass
             # Failed to connect. Make sure the SerialPort is closed
             self.closeSerialPort_srlPort()
@@ -595,7 +595,7 @@ class SilverpakConnectionManager:
         with self._srlPort_lock:
             self.closeSerialPort_srlPort()
 
-    def write(completeMessage, delayFactor):
+    def write(self, completeMessage, delayFactor):
         """
         Writes the passed complete message to the Silverpak.
         Throws an InvalidSilverpakOperationException if not connected.
