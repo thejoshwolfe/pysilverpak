@@ -99,6 +99,7 @@ class Silverpak:
         self.positionChangedHandlers = []
         
         self._homeCalibrationSteps = 0
+        # track the number of times we didn't receive a valid response
         self._failCount = 0
     
     # Public methods
@@ -322,7 +323,6 @@ class Silverpak:
     def _onStoppedMoving(self):
         self._notify(self.stoppedMovingHandlers, StoppedMovingReason.Normal)
     
-    # Private methods
     def dispose(self):
         """cleans up and shuts down. it is always safe to call this method"""
         with self._motor_lock:
@@ -405,7 +405,6 @@ class Silverpak:
                         # Got a valid response
                     except ValueError:
                         pass
-                # track the number of times we didn't receive a valid response
                 if self._position == newPosition:
                     # motor stopped moving
                     self._failCount = 0
@@ -438,8 +437,8 @@ class Silverpak:
                         self._homeCalibrationSteps += 1
                         if self._homeCalibrationSteps > 5:
                             # Calling shenanigans on initialization
-                            # stop the motor damnit
                             stopMessage = GenerateMessage(self.driverAddress, Commands.TerminateCommand)
+                            # stop the motor damnit
                             for _ in range(3):
                                 self._connectionManager_motor.write(stopMessage, 1.0)
                             # crash
@@ -453,7 +452,7 @@ class Silverpak:
                         # disconnect
                         self._motorState_motor = MotorStates.Disconnected
                         self._connectionManager_motor.disconnect()
-                        # raise LostConnection event
+                        # raise connection lost event
                         callbackAction = self._onConnectionLost
         finally:
             # invoke callback sub if any
