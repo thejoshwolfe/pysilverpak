@@ -28,7 +28,7 @@ class Silverpak:
     """Provides an interface to a Lin Engineering Silverpak stepper motor"""
     
     # Public Fields
-    DefaultAcceleration = 500
+    DefaultAcceleration = 50
     DefaultBaudRate = -1
     DefaultDriverAddress = None
     DefaultEncoderRatio = 10266
@@ -41,7 +41,9 @@ class Silverpak:
     DefaultPositionCorrectionTolerance = 5
     DefaultPositionUpdaterInterval = 200
     DefaultRunningCurrent = 50
-    DefaultVelocity = 230000
+    DefaultVelocity = 30000
+
+    TolerableCommunicationFailureCount = 20
     
     # configurable
     errorCallback = None
@@ -165,16 +167,16 @@ class Silverpak:
                 return True
             # End of list was reached and no available Silverpak was found
             return False
-    
+
     def fullInit(self):
         """calls the initalization methods in order"""
         self.initializeMotorSettings()
         self.initializeSmoothMotion()
         self.initializeCoordinates()
-    
+
     def sendRawCommand(self, command):
         """such as 'A10000'"""
-        self._connectionManager_motor.write(GenerateMessage(self.driverAddress, command), 4.0)
+        return self._connectionManager_motor.writeAndGetResponse(GenerateMessage(self.driverAddress, command), 4.0)
     def initializeMotorSettings(self):
         """
         Initialization Step 1. 
@@ -404,9 +406,7 @@ class Silverpak:
                 # Serial Port is still active
                 if response != None:
                     try:
-                        debug("decoding new position: " + repr(response))
                         newPosition = int(response)
-                        debug("new position = " + repr(newPosition))
                         # Got a valid response
                     except ValueError:
                         pass
@@ -450,9 +450,10 @@ class Silverpak:
                             sys.exit("Motor shenanigans detected! This is a quirk resulting from using outdated motor firmware.\nPlease restart the program.")
                 else:
                     # failed to get a valid position
+                    debug("bad position specified: " + repr(response))
                     self._failCount += 1
-                    if self._failCount >= 5:
-                        # failed 5 times in a row. Silverpak must no longer be available.
+                    if self._failCount >= self.TolerableCommunicationFailureCount:
+                        # failed too many times in a row. Silverpak must no longer be available.
                         self._failCount = 0
                         # disconnect
                         self._motorState_motor = MotorStates.Disconnected
@@ -649,7 +650,8 @@ class SilverpakConnectionManager:
         expressed as a multiple of PortDelatUnit, typically in the range 1.0 to 3.0.</param>
         """
         # Clear the read buffer.
-        self.safeReadExisting_srlPort(0.0)
+        garbage = self.safeReadExisting_srlPort(0.0)
+        debug("garbage: " + repr(garbage))
         # Write the message.
         self.safeWrite_srlPort(completeMessage, delayFactor)
         # accumulates chunks of RX data
@@ -658,20 +660,19 @@ class SilverpakConnectionManager:
         while True:
             # Read a chunk.
             rxStr = str(self.safeReadExisting_srlPort(1.0), "mbcs")
-            if rxStr == None or rxStr == "":
-                # if nothing came through, return null in lieu of an infinite loop.
+            if rxStr == "":
+                # nothing to read and we haven't got a complete transmission
                 return None
             # Append chunk to accumulated RX data.
             totalRx += rxStr
             # check to see if the accumulated RX data is complete
-            if IsRxDataComplete(totalRx):
-                break
-        # Trim the RX data. Garunteed to succeed because IsRxDataComplete(totalRx) returned True
-        debug("rx data: " + repr(totalRx))
-        trimResponse = TrimRxData(totalRx)
-        debug("trimmed rx data: " + repr(trimResponse))
-        # return only the return data (not the Status Char).
-        return trimResponse[1:]
+            if not IsRxDataComplete(totalRx):
+                continue # keep accumulating
+            # Trim the RX data
+            trimResponse = TrimRxData(totalRx)
+            debug("trimmed rx data: " + repr(trimResponse))
+            # return only the return data (not the Status Char).
+            return trimResponse[1:]
 
     def write_srlPort(self, completeMessage, delayFactor):
         """
