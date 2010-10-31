@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 
 import sys
 import time
@@ -12,18 +12,22 @@ def main():
     motor = silverpak.Silverpak()
     motor.baudRate = 9600
     motor.driverAddress = silverpak.getDriverAddress(1)
-    
+
     if not motor.findAndConnect():
         sys.exit("no silverpak found")
-    
+    print("===== found a silverpak =====")
+    for attribute in ("portName", "baudRate", "driverAddress"):
+        print("  " + attribute + " = " + repr(motor.__dict__[attribute]))
+    print("=============================")
+
     motor.positionChangedHandlers.append(positionUpdated)
     motor.stoppedMovingHandlers.append(stoppedMoving)
-    
+
     motor.fullInit()
-    
+
     while not done_yet:
         time.sleep(0.1)
-    
+
     motor.dispose()
 
 def positionUpdated():

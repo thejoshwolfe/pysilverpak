@@ -129,7 +129,7 @@ class Silverpak:
             else:
                 # Connection failed
                 return False
-    
+
     def findAndConnect(self):
         """
         Attempts to find and connect to a Silverpak. 
@@ -149,11 +149,11 @@ class Silverpak:
                     continue
                 # Listed available Silverpak found
                 # Initialize connection manager's properties
-                self._connectionManager_motor.PortName = portInfo.portName
-                self._connectionManager_motor.BaudRate = portInfo.baudRate
-                self._connectionManager_motor.DriverAddress = portInfo.driverAddress
+                self._connectionManager_motor.portName = portInfo.portName
+                self._connectionManager_motor.baudRate = portInfo.baudRate
+                self._connectionManager_motor.driverAddress = portInfo.driverAddress
                 # Attempt to connect
-                if not self._connectionManager_motor.Connect():
+                if not self._connectionManager_motor.connect():
                     # this should only happen in the rare event that the Silverpak was disconnected between the call to SearchComPorts and now
                     continue
                 # Connection succeeded
@@ -161,7 +161,7 @@ class Silverpak:
                 self.portName = portInfo.portName
                 self.baudRate = portInfo.baudRate
                 self.driverAddress = portInfo.driverAddress
-                self.motorState_motor = MotorStates.Connected
+                self._motorState_motor = MotorStates.Connected
                 return True
             # End of list was reached and no available Silverpak was found
             return False
@@ -217,7 +217,7 @@ class Silverpak:
             # Send a small motion command five times
             smoothMotionInitMsg = GenerateMessage(self.driverAddress, Commands.GoPositive + "1")
             for _ in range(5):
-                self._connectionManager_motor.Write(smoothMotionInitMsg, 3.0)
+                self._connectionManager_motor.write(smoothMotionInitMsg, 3.0)
             # Update state
             self._motorState_motor = MotorStates.InitializedSmoothMotion
     def initializeCoordinates(self):
@@ -401,7 +401,9 @@ class Silverpak:
                 # Serial Port is still active
                 if response != None:
                     try:
+                        debug("decoding new position: " + repr(response))
                         newPosition = int(response)
+                        debug("new position = " + repr(newPosition))
                         # Got a valid response
                     except ValueError:
                         pass
@@ -619,7 +621,7 @@ class SilverpakConnectionManager:
         """
         with self._srlPort_lock:
             # Validate state
-            if not self._serialPortInterface_srlPort.IsOpen: raise InvalidSilverpakOperationException()
+            if not self._serialPortInterface_srlPort.isOpen(): raise InvalidSilverpakOperationException()
             # write messag and get response
             return self.writeAndGetResponse_srlPort(completeMessage, delayFactor)
 
@@ -652,7 +654,7 @@ class SilverpakConnectionManager:
         # Read the response from the Silverpak in chunks until the accumulated message is complete.
         while True:
             # Read a chunk.
-            rxStr = self.safeReadExisting_srlPort(1.0)
+            rxStr = str(self.safeReadExisting_srlPort(1.0), "mbcs")
             if rxStr == None or rxStr == "":
                 # if nothing came through, return null in lieu of an infinite loop.
                 return None
@@ -662,7 +664,9 @@ class SilverpakConnectionManager:
             if IsRxDataComplete(totalRx):
                 break
         # Trim the RX data. Garunteed to succeed because IsRxDataComplete(totalRx) returned True
+        debug("rx data: " + repr(totalRx))
         trimResponse = TrimRxData(totalRx)
+        debug("trimmed rx data: " + repr(trimResponse))
         # return only the return data (not the Status Char).
         return trimResponse[1:]
 
@@ -704,6 +708,7 @@ class SilverpakConnectionManager:
         # wait for safe read/write
         self.waitForSafeReadWrite_srlPort(delayFactor)
         try:
+            debug("write: " + repr(completeMessage))
             self._serialPortInterface_srlPort.write(bytes(completeMessage, "utf8"))
         except Exception as ex:
             # except any undocumented exceptions from writing
@@ -750,8 +755,8 @@ def IsRxDataComplete(rxData):
 def TrimRxData(rxData):
     """Returns just the status char and data from the passed RX message. RX data must be complete."""
     start = rxData.find(DTProtocolRxStartStr)
-    fstTrim = rxData[start + len(DTProtocolRxStartStr)]
-    return fstTrim[:fstTrim.find(DTProtocolRxEndStr)]
+    firstTrim = rxData[start + len(DTProtocolRxStartStr):]
+    return firstTrim[:firstTrim.find(DTProtocolRxEndStr)]
 
 def makeSerialPort():
     """Configures non-variable properties of the passed serial port object in accordance with DT Protocol."""
@@ -835,9 +840,9 @@ def GetSilverpakPortInfo(portName, baudRate, driverAddress):
 
     # test the COM port
     try:
-        # Open the serial port. can raise UnauthorizedAccessException
+        # Open the serial port. can raise errors.
         sp.open()
-        # Write a safe query. can raise IOException
+        # Write a safe query. can raise errors
         sp.write(bytes(GenerateMessage(driverAddress, SafeQueryCommandStr), "utf8"))
         # read response
         # accumulates chunks of RX data
@@ -846,7 +851,7 @@ def GetSilverpakPortInfo(portName, baudRate, driverAddress):
             # wait for a chunk to be written to the read buffer
             time.sleep(SilverpakConnectionManager.PortDelayUnit)
             # retrieve any data from the read buffer
-            newRx = str(sp.read(1), "utf8")
+            newRx = str(sp.read(1), "mbcs")
             if newRx == "":
                 # abort if no data was written
                 return None
@@ -979,5 +984,13 @@ class MotorStates:
         InitializingCoordinates_calibrateHome,
         Moving,
     )
+
+
+debugging = True
+def debug(message):
+    if not debugging:
+        return
+    print(message)
+
 
 
