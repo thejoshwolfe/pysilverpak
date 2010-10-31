@@ -172,6 +172,9 @@ class Silverpak:
         self.initializeSmoothMotion()
         self.initializeCoordinates()
     
+    def sendRawCommand(self, command):
+        """such as 'A10000'"""
+        self._connectionManager_motor.write(GenerateMessage(self.driverAddress, command), 4.0)
     def initializeMotorSettings(self):
         """
         Initialization Step 1. 
