@@ -117,7 +117,7 @@ class Silverpak:
             if self.portName == self.DefaultPortname: raise ValueError("portName property must be set before calling this method. See also findAndConnect().")
             if self.baudRate == self.DefaultBaudRate: raise ValueError("baudRate property must be set before calling this method. See also findAndConnect().")
             if self.driverAddress == self.DefaultDriverAddress: raise ValueError("driverAddress property must be set before calling this method. See also findAndConnect().")
-            
+
             # Initialize connection manager's properties
             self._connectionManager_motor.portName = self.portName
             self._connectionManager_motor.baudRate = self.baudRate
@@ -189,7 +189,7 @@ class Silverpak:
             if self._motorState_motor != MotorStates.Connected: raise InvalidSilverpakOperationException("Initialization methods must be called in the proper order.")
             
             # Send settings-initialization command
-            self._connectionManager_motor.write(GenerateMessage(self.driverAddress, self._generateFullInitCommandList()), 4.0)
+            self._connectionManager_motor.write(GenerateMessage(self.driverAddress, self._generateFullInitCommandList()), 5.0)
             # Update state
             self._motorState_motor = MotorStates.InitializedSettings
 
@@ -564,7 +564,7 @@ class SilverpakConnectionManager:
     # The delay factor for a safe query.
     SafeQueryDelayFactor = 3.0
     # The minimum amount of time in seconds to wait for the Silverpak to respond to a command.
-    PortDelayUnit = 0.05 * 2
+    PortDelayUnit = 0.05
 
     # Public properties
 
@@ -665,15 +665,16 @@ class SilverpakConnectionManager:
         communication("garbage: " + repr(garbage))
         # Write the message.
         self.safeWrite_srlPort(completeMessage, delayFactor)
-        # accumulates chunks of RX data
+        # accumulates chunks of RX data (it's O(n^2), but w/e)
         totalRx = ""
         # Read the response from the Silverpak in chunks until the accumulated message is complete.
+        responseContent = None
         while True:
             # Read a chunk.
             rxStr = str(self.safeReadExisting_srlPort(1.0), "mbcs")
             if rxStr == "":
-                # nothing to read and we haven't got a complete transmission
-                return None
+                # nothing more to read
+                return responseContent
             # Append chunk to accumulated RX data.
             totalRx += rxStr
             # check to see if the accumulated RX data is complete
@@ -682,15 +683,9 @@ class SilverpakConnectionManager:
             # Trim the RX data
             trimResponse = TrimRxData(totalRx)
             communication("trimmed rx data: " + repr(trimResponse))
-            # check the status char
-            statusChar = trimResponse[0]
+            # use the last valid response as return message
             responseContent = trimResponse[1:]
-            ready = ord(statusChar) & 1 << 5 != 0
-            if not ready:
-                warning("device is not ready. trying to get more data")
-                totalRx = ""
-                continue
-            return responseContent
+            totalRx = ""
 
     def write_srlPort(self, completeMessage, delayFactor):
         """
@@ -740,13 +735,14 @@ class SilverpakConnectionManager:
     def waitForSafeReadWrite_srlPort(self, incrementFactor):
         """
         Waits until the time passed by the last call to this method passes.
+        Stores the next time that interaction with the Silverpak is safe.
         Part of the lock group: srlPort.
         <param name="incrementFactor">How long to wait after this call to this method,
         expressed as a multiple of PortDelatUnit, typically 1.0.</param>
         """
-        # stores the next time that interaction with the Silverpak is safe
         # wait until next read write time
-        time.sleep(max(0, self._nextReadWriteTime - time.time()))
+        sleepyTime = max(0, self._nextReadWriteTime - time.time())
+        time.sleep(sleepyTime)
         # increment next read write time
         self._nextReadWriteTime = time.time() + self.PortDelayUnit * incrementFactor
 
