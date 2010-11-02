@@ -8,11 +8,6 @@ import silverpak
 done_yet = False
 
 def main():
-    global motor
-    motor = create17()
-    motor.baudRate = 9600
-    motor.driverAddress = 1
-
     if not motor.findAndConnect():
         sys.exit("no silverpak found")
     print("===== found a silverpak =====")
@@ -35,6 +30,14 @@ def create17():
     motor.fancy = False
     motor.velocity = 300000
     motor.acceleration = 500
+    motor.baudRate = 9600
+    motor.driverAddress = 1
+    return motor
+
+def create23():
+    motor = silverpak.Silverpak()
+    motor.baudRate = 9600
+    motor.driverAddress = 1
     return motor
 
 def positionUpdated():
@@ -58,4 +61,12 @@ def stoppedMoving(reason):
         done_yet = True
 
 if __name__ == "__main__":
+    global motor
+    args = sys.argv[1:]
+    if args[0] == "23":
+        motor = create23()
+    elif args[0] == "17":
+        motor = create17()
+    else:
+        sys.exit("usage: (17|23)")
     main()

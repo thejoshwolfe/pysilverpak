@@ -187,12 +187,21 @@ class Silverpak:
         """
         with self._motor_lock:
             # Validate state
-            if self._motorState_motor != MotorStates.Connected: raise InvalidSilverpakOperationException("Initialization methods must be called in the proper order.")
+            self._checkStopped()
             
+            if self._motorState_motor != MotorStates.Connected: raise InvalidSilverpakOperationException("Initialization methods must be called in the proper order.")
+
             # Send settings-initialization command
             self._connectionManager_motor.write(GenerateMessage(self.driverAddress, self._generateFullInitCommandList()), 5.0)
             # Update state
             self._motorState_motor = MotorStates.InitializedSettings
+
+    def _checkStopped(self):
+        if self._motorState_motor != MotorStates.Stopped:
+            raise InvalidSilverpakOperationException("Connection is not active.")
+    def _checkConnected(self):
+        if self._motorState_motor == MotorStates.Disconnected:
+            raise InvalidSilverpakOperationException("Connection is not active.")
 
     def resendMotorSettings(self):
         """
@@ -490,14 +499,14 @@ class Silverpak:
         settings.append(Commands.SetHoldingCurrent + str(self.holdingCurrent))
         settings.append(Commands.SetRunningCurrent + str(self.runningCurrent))
         settings.append(Commands.SetMotorPolarity + str(self.motorPolarity))
-        if not self.fancy:
+        if self.fancy:
             settings.append(Commands.SetHomePolarity + str(self.homePolarity))
             settings.append(Commands.SetPositionCorrectionTolerance + str(self.positionCorrectionTolerance))
             settings.append(Commands.SetPositionCorrectionRetries + str(self.positionCorrectionRetries))
             settings.append(Commands.SetEncoderRatio + "1000")
         settings.append(Commands.SetVelocity + str(self.velocity))
         settings.append(Commands.SetAcceleration + str(self.acceleration))
-        if not self.fancy:
+        if self.fancy:
             settings.append(Commands.SetEncoderRatio + str(self.encoderRatio))
         return "".join(settings)
 
@@ -986,9 +995,9 @@ class MotorStates:
     # Serial Port is just open.
     Connected = "[Connected]"
     # Motor settings have been written to the Silverpak.
-    InitializedSettings = "[InitializedSettings]"
+    InitializedSettings = Connected # "[InitializedSettings]"
     # Small movements have been issued to the Silverpak to clear initialization quirks.
-    InitializedSmoothMotion = "[InitializedSmoothMotion]"
+    InitializedSmoothMotion = Connected # "[InitializedSmoothMotion]"
     # In the process of moving to the zero position.
     InitializingCoordinates_moveToZero = "[InitializingCoordinates_moveToZero]"
     # The "official" homing command. should complete very quickly.
@@ -996,10 +1005,14 @@ class MotorStates:
     # In the process of aborting coordinate initialization.
     AbortingCoordinateInitialization = "[AbortingCoordinateInitialization]"
     # Fully initialized and stopped.
-    Ready = "[Ready]"
+    Ready = Connected # "[Ready]"
+    Stopped = Connected
     # In the process of moving.
     Moving = "[Moving]"
 
+    stoppedStates = (
+        
+    )
     movingStates = (
         InitializingCoordinates_moveToZero,
         InitializingCoordinates_calibrateHome,
@@ -1013,7 +1026,7 @@ class LogLevel:
     Warning = 2
     Debug = 3
     Communication = 4
-logLevel = LogLevel.Communication
+logLevel = LogLevel.Debug
 def makeLogSomething(prefix, minLevel):
     def logSomething(message):
         if logLevel < minLevel:
