@@ -27,7 +27,6 @@ __all__.append("Silverpak")
 class Silverpak:
     """Provides an interface to a Lin Engineering Silverpak stepper motor"""
     
-    # Public Fields
     DefaultAcceleration = 50
     DefaultBaudRate = -1
     DefaultDriverAddress = None
@@ -44,10 +43,10 @@ class Silverpak:
     DefaultVelocity = 30000
 
     TolerableCommunicationFailureCount = 20
-    
+
     # configurable
     errorCallback = None
-    
+
     def isActive(self):
         """Returns a value indicating whether this Silverpak is actively connected to a Silverpak"""
         with self._motor_lock:
@@ -193,7 +192,7 @@ class Silverpak:
             self._connectionManager_motor.write(GenerateMessage(self.driverAddress, self._generateFullInitCommandList()), 4.0)
             # Update state
             self._motorState_motor = MotorStates.InitializedSettings
-    
+
     def resendMotorSettings(self):
         """
         Call this method if any changes to the motor settings properties need to be applied.
@@ -206,12 +205,12 @@ class Silverpak:
             if self._motorState_motor in MotorStates.movingStates: raise InvalidSilverpakOperationException("Cannot resend motor settings while the motor is moving.")
             # Send settings command
             self._connectionManager_motor.write(GenerateMessage(self.driverAddress, self._generateResendInitCommandList()), 4.0)
-    
+
     def initializeSmoothMotion(self):
         """
         Initialization Step 2. 
         This method will send a small motion command five times to bypass any initialization quirks that some motors are prone to exhibit.
-        This method causes the motor to move up to 5 microsteps in the positive direction and causes the motor to briefly produce a rapid tapping sound.
+        This method causes the motor to move 5 microsteps in the positive direction and causes the motor to briefly produce a rapid tapping sound.
         The next step is initializeCoordinates().
         Calling this method out of order will raise an InvalidSilverpakOperationException.
         """
@@ -239,7 +238,7 @@ class Silverpak:
             self._moveToZero()
         # Now that the motor is moving, begin listening for position changes
         self._startPositionUpdater()
-    
+
     def _moveToZero(self):
         # move to zero in preparation for home calibration
         cmd = Commands.SetPosition + str(int(self.maxPosition * (self.encoderRatio / 1000.0)))
@@ -250,14 +249,14 @@ class Silverpak:
         
         # Update state
         self._motorState_motor = MotorStates.InitializingCoordinates_moveToZero
-    
+
     def goInfinite(self, positive):
         """
         Sends the motor either to position 0 or to the position specified by the MaxPosition property.
         Calling this method before the motor has been fully initialized will raise an InvalidSilverpakOperationException.
         """
         self.goToPosition({True: self.maxPosition, False: 0}[positive])
-    
+
     def stop(self):
         """
         Stops the motor.
@@ -276,7 +275,7 @@ class Silverpak:
                     MotorStates.InitializingCoordinates_calibrateHome,
                 ):
                 self._motorState_motor = MotorStates.AbortingCoordinateInitialization
-    
+
     def goToPosition(self, position):
         """
         Sends the motor to the passed position.
@@ -293,7 +292,7 @@ class Silverpak:
             self._connectionManager_motor.write(GenerateMessage(self.driverAddress, Commands.GoAbsolute + str(position)), 1.0)
             # Update state
             self._motorState_motor = MotorStates.Moving
-    
+
     def disconnect(self):
         """
         Terminates the connection to the Silverpak and closes the COM port.
@@ -313,7 +312,7 @@ class Silverpak:
             self._connectionManager_motor.disconnect()
             # Update state
             self._motorState_motor = MotorStates.Disconnected
-    
+
     def _notify(self, handlers, *args):
         for handler in handlers[:]:
             handler(*args)
@@ -327,7 +326,7 @@ class Silverpak:
         self._notify(self.positionChangedHandlers)
     def _onStoppedMoving(self):
         self._notify(self.stoppedMovingHandlers, StoppedMovingReason.Normal)
-    
+
     def dispose(self):
         """cleans up and shuts down. it is always safe to call this method"""
         with self._motor_lock:
@@ -339,7 +338,7 @@ class Silverpak:
     def __del__(self):
         """in case users don't dispose this object properly"""
         self._keepPositionUpdaterRunning_posUpd = False
-    
+
     # Makes sure the position updater thread is running.
     def _startPositionUpdater(self):
         with self._posUpd_lock:
@@ -348,7 +347,7 @@ class Silverpak:
                 self._positionUpdaterThread_posUpd = threading.Thread(target=self._positionUpdater_run)
                 self._positionUpdaterThread_posUpd.daemon = True
                 self._positionUpdaterThread_posUpd.start()
-    
+
     def _stopPositionUpdater(self):
         """Stops the position updater thread and makes sure it dies."""
         with self._posUpd_lock:
@@ -371,7 +370,7 @@ class Silverpak:
                 self._positionUpdaterThread_posUpd = None
         except Exception as ex:
             Silverpak._invokeErrorCallback(ex)
-    
+
     def _positionUpdater_run(self):
         """Method that the position getter thread runs."""
         try:
@@ -385,11 +384,11 @@ class Silverpak:
                 time.sleep(max(0.0, nextIterationTime - time.time()))
         except Exception as ex:
             Silverpak._invokeErrorCallback(ex)
-    
+
     def _updatePosition(self):
         """Updates the Position property by querying the position of the motor."""
         # store a function to call after the lock has been released
-        callbackAction = None
+        postLockAction = None
         try:
             with self._motor_lock:
                 getPositionMessage = GenerateMessage(self.driverAddress, Commands.QueryMotorPosition)
@@ -401,7 +400,7 @@ class Silverpak:
                 except InvalidSilverpakOperationException:
                     # the Silverpak's been disconnected
                     # shut down updater thread
-                    callbackAction = self._stopPositionUpdater
+                    postLockAction = self._stopPositionUpdater
                     return
                 # Serial Port is still active
                 if response != None:
@@ -412,31 +411,40 @@ class Silverpak:
                         pass
                 if self._position == newPosition:
                     # motor stopped moving
+                    debug("motor stopped moving")
                     self._failCount = 0
                     if self._motorState_motor == MotorStates.InitializingCoordinates_moveToZero:
                         # wait! sometimes the motor will stop at 5000000 and lie about being at the top (stupid old firmware)
                         if abs(self._position - 5000000) < 100:
+                            # try again
+                            debug("move to 0 stopped at 5000000. try again.")
                             self._moveToZero()
                         else:
                             self._motorState_motor = MotorStates.InitializingCoordinates_calibrateHome
                             # Send the homing message
+                            debug("sending the homing message")
                             initCoordMessage = GenerateMessage(self.driverAddress, Commands.GoHome + str(int(self.maxPosition * (self.encoderRatio / 1000.0))))
                             self._connectionManager_motor.write(initCoordMessage, 1.0)
                             self._homeCalibrationSteps = 0
                     elif self._motorState_motor == MotorStates.InitializingCoordinates_calibrateHome:
+                        debug("calibrate home is complete.")
                         self._motorState_motor = MotorStates.Ready
-                        callbackAction = self._onCoordinatesInitialized
+                        postLockAction = self._onCoordinatesInitialized
                     elif self._motorState_motor == MotorStates.AbortingCoordinateInitialization:
+                        debug("aborting coordinate initialization complete.")
                         self._motorState_motor = MotorStates.InitializedSmoothMotion
-                        callbackAction = self._onCoordinatesInitializationAborted
+                        postLockAction = self._onCoordinatesInitializationAborted
                     elif self._motorState_motor == MotorStates.Moving:
+                        debug("normal motion complete.")
                         self._motorState_motor = MotorStates.Ready
-                        callbackAction = self._onStoppedMoving
+                        postLockAction = self._onStoppedMoving
+                    else:
+                        warning("stopped in a non-standard state: " + repr(self._motorState_motor))
                 elif newPosition != None:
-                    # motor changed position
+                    debug("motor changed position.")
                     self._failCount = 0
                     self._position = newPosition
-                    callbackAction = self._onPositionChanged
+                    postLockAction = self._onPositionChanged
                     # make sure the home calibration isn't sneaking away
                     if self._motorState_motor == MotorStates.InitializingCoordinates_calibrateHome:
                         self._homeCalibrationSteps += 1
@@ -444,14 +452,17 @@ class Silverpak:
                             # Calling shenanigans on initialization
                             stopMessage = GenerateMessage(self.driverAddress, Commands.TerminateCommand)
                             # stop the motor damnit
+                            debug("stopping due to shenanigans.")
                             for _ in range(3):
                                 self._connectionManager_motor.write(stopMessage, 1.0)
                             # crash
-                            sys.exit("Motor shenanigans detected! This is a quirk resulting from using outdated motor firmware.\nPlease restart the program.")
+                            shenanigans = "Motor shenanigans detected! This is a quirk resulting from using outdated motor firmware.\nPlease restart the program."
+                            error(shenanigans)
+                            sys.exit(shenanigans)
                 else:
                     # failed to get a valid position
-                    debug("bad position specified: " + repr(response))
                     self._failCount += 1
+                    debug("bad position specified: " + repr(response) + ". times in a row: " + str(self._failCount))
                     if self._failCount >= self.TolerableCommunicationFailureCount:
                         # failed too many times in a row. Silverpak must no longer be available.
                         self._failCount = 0
@@ -459,19 +470,19 @@ class Silverpak:
                         self._motorState_motor = MotorStates.Disconnected
                         self._connectionManager_motor.disconnect()
                         # raise connection lost event
-                        callbackAction = self._onConnectionLost
+                        postLockAction = self._onConnectionLost
         finally:
-            # invoke callback sub if any
-            if callbackAction != None:
-                callbackAction()
-    
+            # run action if any
+            if postLockAction != None:
+                postLockAction()
+
     def _generateFullInitCommandList(self):
         """Produces a command list to initialize the motor from scratch."""
         initMotorSettingsProgramHeader = Commands.SetPosition + "0"
         # Position Correction + Optical Limit Switches
         initMotorSettingsProgramFooter = Commands.SetMode + "10"
         return initMotorSettingsProgramHeader + self._generateResendInitCommandList() + initMotorSettingsProgramFooter
-    
+
     def _generateResendInitCommandList(self):
         """Produces a command list to set the adjustable motor settings."""
         return Commands.SetHoldCurrent + str(self.holdingCurrent) + \
@@ -484,10 +495,10 @@ class Silverpak:
                 Commands.SetVelocity + str(self.velocity) + \
                 Commands.SetAcceleration + str(self.acceleration) + \
                 Commands.SetEncoderRatio + str(self.encoderRatio)
-    
+
     @staticmethod
     def _invokeErrorCallback(ex):
-        """Invokes the ErrorCalback delegate if it has been set. Otherwise, re-throws the exception so that the program crashes."""
+        """Invokes the ErrorCalback delegate if it has been set. Otherwise, re-throws the exception."""
         if Silverpak.errorCallback != None:
             Silverpak.errorCallback(ex)
         else:
@@ -549,25 +560,25 @@ class StoppedMovingReason:
 
 class SilverpakConnectionManager:
     """Manages the connection to a Silverpak through a serial port."""
-    
+
     # The delay factor for a safe query.
     SafeQueryDelayFactor = 3.0
     # The minimum amount of time in seconds to wait for the Silverpak to respond to a command.
-    PortDelayUnit = 0.05
-    
+    PortDelayUnit = 0.05 * 2
+
     # Public properties
-    
+
     # Public constructors
     def __init__(self):
         self.portName = None
         self.baudRate = 0
         self.driverAddress = None
-        
+
         # Lock object for the serial port
         self._srlPort_lock = threading.RLock()
         # The serial port object used to communicate with a Silverpak.
         self._serialPortInterface_srlPort = makeSerialPort()
-    
+
         self._nextReadWriteTime = time.time()
     # Public methods
     def connect(self):
@@ -594,7 +605,7 @@ class SilverpakConnectionManager:
             # Failed to connect. Make sure the SerialPort is closed
             self.closeSerialPort_srlPort()
             return False
-    
+
     def disconnect(self):
         """Makes sure there is no active connection to a Silverpak."""
         with self._srlPort_lock:
@@ -651,7 +662,7 @@ class SilverpakConnectionManager:
         """
         # Clear the read buffer.
         garbage = self.safeReadExisting_srlPort(0.0)
-        debug("garbage: " + repr(garbage))
+        communication("garbage: " + repr(garbage))
         # Write the message.
         self.safeWrite_srlPort(completeMessage, delayFactor)
         # accumulates chunks of RX data
@@ -670,9 +681,16 @@ class SilverpakConnectionManager:
                 continue # keep accumulating
             # Trim the RX data
             trimResponse = TrimRxData(totalRx)
-            debug("trimmed rx data: " + repr(trimResponse))
-            # return only the return data (not the Status Char).
-            return trimResponse[1:]
+            communication("trimmed rx data: " + repr(trimResponse))
+            # check the status char
+            statusChar = trimResponse[0]
+            responseContent = trimResponse[1:]
+            ready = ord(statusChar) & 1 << 5 != 0
+            if not ready:
+                warning("device is not ready. trying to get more data")
+                totalRx = ""
+                continue
+            return responseContent
 
     def write_srlPort(self, completeMessage, delayFactor):
         """
@@ -712,7 +730,7 @@ class SilverpakConnectionManager:
         # wait for safe read/write
         self.waitForSafeReadWrite_srlPort(delayFactor)
         try:
-            debug("write: " + repr(completeMessage))
+            communication("write: " + repr(completeMessage))
             self._serialPortInterface_srlPort.write(bytes(completeMessage, "utf8"))
         except Exception as ex:
             # except any undocumented exceptions from writing
@@ -990,11 +1008,21 @@ class MotorStates:
     )
 
 
-debugging = True
-def debug(message):
-    if not debugging:
-        return
-    print(message)
-
-
+class LogLevel:
+    Silence = 0
+    Error = 1
+    Warning = 2
+    Debug = 3
+    Communication = 4
+logLevel = LogLevel.Communication
+def makeLogSomething(prefix, minLevel):
+    def logSomething(message):
+        if logLevel < minLevel:
+            return
+        print(prefix + message)
+    return logSomething
+error = makeLogSomething("ERROR: ", LogLevel.Error)
+warning = makeLogSomething("WARNING: ", LogLevel.Warning)
+debug = makeLogSomething("DEBUG: ", LogLevel.Debug)
+communication = makeLogSomething("COMMUNICATION: ", LogLevel.Communication)
 

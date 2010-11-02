@@ -31,8 +31,7 @@ def main():
     motor.dispose()
 
 def positionUpdated():
-    position = motor.getPosition()
-    print("position: " + str(position))
+    print("position: " + str(motor.position()))
 
 def stoppedMoving(reason):
     message = {
@@ -40,11 +39,14 @@ def stoppedMoving(reason):
         silverpak.StoppedMovingReason.Initialized: "initialized",
         silverpak.StoppedMovingReason.InitializationAborted: "aborted",
     }[reason]
-    print("stopped: " + message)
-    
-    if message == silverpak.StoppedMovingReason.Initialized:
-        motor.goToPosition(100000)
-    elif message == silverpak.StoppedMovingReason.Normal:
+    print("stopped reason: " + message + ". position: " + str(motor.position()))
+
+    if reason == silverpak.StoppedMovingReason.Initialized:
+        newPosition = 5000
+        print("going to " + str(newPosition))
+        motor.goToPosition(newPosition)
+    elif reason == silverpak.StoppedMovingReason.Normal:
+        print("done")
         global done_yet
         done_yet = True
 

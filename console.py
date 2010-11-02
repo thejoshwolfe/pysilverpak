@@ -84,7 +84,7 @@ def fancyConsole():
             print(repr(result))
 
 def positionUpdated():
-    position = motor.getPosition()
+    position = motor.position()
     print("position: " + repr(position))
 
 def stoppedMoving(reason):
