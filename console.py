@@ -29,7 +29,6 @@ def main(options):
         motor.connectionLostHandlers.append(connectionLost)
 
         if options.raw:
-            print("settings init (not sent): " + motor._generateFullInitCommandList())
             print("entering raw mode")
             while True:
                 motor.sendRawCommand(input(">>> "))

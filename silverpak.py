@@ -42,7 +42,7 @@ class Silverpak:
     DefaultRunningCurrent = 50
     DefaultVelocity = 30000
 
-    TolerableCommunicationFailureCount = 20
+    TolerableCommunicationFailureCount = 5
 
     # configurable
     errorCallback = None
@@ -52,9 +52,9 @@ class Silverpak:
         with self._motor_lock:
             return self._motorState_motor != MotorStates.Disconnected
     def isReady(self):
-        """whether the motor is ready to accept a command. i.e. connected, initialized, and stopped."""
+        """whether the motor is ready to accept a command. i.e. connected and stopped."""
         with self._motor_lock:
-            return self._motorState_motor == MotorStates.Ready
+            return self._motorState_motor == MotorStates.Stopped
     def position(self):
         return self._position
 
@@ -114,7 +114,7 @@ class Silverpak:
         """
         with self._motor_lock:
             # Validate state and connection properties
-            if self._motorState_motor != MotorStates.Disconnected: raise InvalidSilverpakOperationException("Connection is already active. Make sure the isActive property returns False before calling this method.")
+            if self._motorState_motor != MotorStates.Disconnected: raise InvalidSilverpakOperationException("Connection is already active.")
             if self.portName == self.DefaultPortname: raise ValueError("portName property must be set before calling this method. See also findAndConnect().")
             if self.baudRate == self.DefaultBaudRate: raise ValueError("baudRate property must be set before calling this method. See also findAndConnect().")
             if self.driverAddress == self.DefaultDriverAddress: raise ValueError("driverAddress property must be set before calling this method. See also findAndConnect().")
@@ -126,7 +126,7 @@ class Silverpak:
             # Attempt to connect
             if self._connectionManager_motor.connect():
                 # Connection succeeded
-                self._motorState_motor = MotorStates.Connected
+                self._motorState_motor = MotorStates.Stopped
                 return True
             else:
                 # Connection failed
@@ -163,7 +163,7 @@ class Silverpak:
                 self.portName = portInfo.portName
                 self.baudRate = portInfo.baudRate
                 self.driverAddress = portInfo.driverAddress
-                self._motorState_motor = MotorStates.Connected
+                self._motorState_motor = MotorStates.Stopped
                 return True
             # End of list was reached and no available Silverpak was found
             return False
@@ -188,17 +188,16 @@ class Silverpak:
         with self._motor_lock:
             # Validate state
             self._checkStopped()
-            
-            if self._motorState_motor != MotorStates.Connected: raise InvalidSilverpakOperationException("Initialization methods must be called in the proper order.")
-
             # Send settings-initialization command
             self._connectionManager_motor.write(GenerateMessage(self.driverAddress, self._generateFullInitCommandList()), 5.0)
             # Update state
-            self._motorState_motor = MotorStates.InitializedSettings
+            self._motorState_motor = MotorStates.Stopped
 
     def _checkStopped(self):
+        """must be in Stopped state, meaning ready to go."""
+        self._checkConnected()
         if self._motorState_motor != MotorStates.Stopped:
-            raise InvalidSilverpakOperationException("Connection is not active.")
+            raise InvalidSilverpakOperationException("operation cannot be performed while moving.")
     def _checkConnected(self):
         if self._motorState_motor == MotorStates.Disconnected:
             raise InvalidSilverpakOperationException("Connection is not active.")
@@ -211,8 +210,7 @@ class Silverpak:
         """
         with self._motor_lock:
             # Validate state
-            if self._motorState_motor == MotorStates.Disconnected: raise InvalidSilverpakOperationException("Connection is not active.")
-            if self._motorState_motor in MotorStates.movingStates: raise InvalidSilverpakOperationException("Cannot resend motor settings while the motor is moving.")
+            self._checkStopped()
             # Send settings command
             self._connectionManager_motor.write(GenerateMessage(self.driverAddress, self._generateResendInitCommandList()), 4.0)
 
@@ -226,14 +224,14 @@ class Silverpak:
         """
         with self._motor_lock:
             # Validate state
-            if self._motorState_motor != MotorStates.InitializedSettings: raise InvalidSilverpakOperationException("Initialization methods must be called in the proper order.")
-            
+            self._checkStopped()
+
             # Send a small motion command five times
             smoothMotionInitMsg = GenerateMessage(self.driverAddress, Commands.GoPositive + "1")
             for _ in range(5):
                 self._connectionManager_motor.write(smoothMotionInitMsg, 3.0)
             # Update state
-            self._motorState_motor = MotorStates.InitializedSmoothMotion
+            self._motorState_motor = MotorStates.Stopped
     def initializeCoordinates(self):
         """
         Initialization Step 3. 
@@ -244,15 +242,26 @@ class Silverpak:
         """
         with self._motor_lock:
             # Validate state
-            if self._motorState_motor != MotorStates.InitializedSmoothMotion: raise InvalidSilverpakOperationException("Initialization methods must be called in the proper order.")
-            self._moveToZero()
+            self._checkStopped()
+            if self.fancy:
+                self._moveToZero()
+            else:
+                # don't go anywhere. assumer here is 0.
+                cmd = Commands.SetPosition + "0"
+                message = GenerateMessage(self.driverAddress, cmd)
+                # get a response to clear the read buffer
+                self._connectionManager_motor.writeAndGetResponse(message, 1.0)
+        if not self.fancy:
+            # no stopping to trigger this, so call it now.
+            self._onCoordinatesInitialized()
         # Now that the motor is moving, begin listening for position changes
         self._startPositionUpdater()
 
     def _moveToZero(self):
         # move to zero in preparation for home calibration
         cmd = Commands.SetPosition + str(int(self.maxPosition * (self.encoderRatio / 1000.0)))
-        cmd += Commands.SetEncoderRatio + str(self.encoderRatio)
+        if self.fancy:
+            cmd += Commands.SetEncoderRatio + str(self.encoderRatio)
         cmd += Commands.GoAbsolute + "0"
         message = GenerateMessage(self.driverAddress, cmd)
         self._connectionManager_motor.write(message, 2.0)
@@ -274,8 +283,8 @@ class Silverpak:
         """
         with self._motor_lock:
             # Validate state
-            if self._motorState_motor == MotorStates.Disconnected: raise InvalidSilverpakOperationException("Connection is not active.")
-            
+            self_checkConnected()
+
             # Send stop command
             stopMessage = GenerateMessage(self.driverAddress, Commands.TerminateCommand)
             self._connectionManager_motor.write(stopMessage, 1.0)
@@ -293,10 +302,7 @@ class Silverpak:
         """
         with self._motor_lock:
             # Validate state
-            if self._motorState_motor not in (
-                    MotorStates.Ready,
-                    MotorStates.Moving,
-                ):
+            if self._motorState_motor not in (MotorStates.Stopped, MotorStates.Moving):
                 raise InvalidSilverpakOperationException("Motor is not fully initialized")
             # Send absolute motion command
             self._connectionManager_motor.write(GenerateMessage(self.driverAddress, Commands.GoAbsolute + str(position)), 1.0)
@@ -310,12 +316,9 @@ class Silverpak:
         """
         with self._motor_lock:
             # Validate state
+            self._checkConnected()
             if self._motorState_motor == MotorStates.Disconnected: raise InvalidSilverpakOperationException("Connection is not active.")
-            if self._motorState_motor in (
-                    MotorStates.InitializingCoordinates_moveToZero,
-                    MotorStates.InitializingCoordinates_calibrateHome,
-                    MotorStates.Moving,
-                ):
+            if self._motorState_motor in MotorStates.moving:
                 raise InvalidSilverpakOperationException("Disconnecting while the motor is moving is not allowed.")
             
             # disconnect
@@ -340,11 +343,13 @@ class Silverpak:
     def dispose(self):
         """cleans up and shuts down. it is always safe to call this method"""
         with self._motor_lock:
-            if self._motorState_motor in MotorStates.movingStates:
+            if self._isMoving_motor():
                 self._connectionManager_motor.write(GenerateMessage(self.driverAddress, Commands.TerminateCommand), 1.0)
             self._stopPositionUpdater()
             self._connectionManager_motor.disconnect()
             self._motorState_motor = MotorStates.Disconnected
+    def _isMoving_motor(self):
+        return self._motorState_motor not in (MotorStates.Disconnected, MotorStates.Stopped)
     def __del__(self):
         """in case users don't dispose this object properly"""
         self._keepPositionUpdaterRunning_posUpd = False
@@ -414,6 +419,9 @@ class Silverpak:
                     return
                 # Serial Port is still active
                 if response != None:
+                    if response.endswith("\0"):
+                        # the Silverpak17 v5.71 puts a \0 at the end of positions
+                        response = response[:-1]
                     try:
                         newPosition = int(response)
                         # Got a valid response
@@ -438,18 +446,21 @@ class Silverpak:
                             self._homeCalibrationSteps = 0
                     elif self._motorState_motor == MotorStates.InitializingCoordinates_calibrateHome:
                         debug("calibrate home is complete.")
-                        self._motorState_motor = MotorStates.Ready
+                        self._motorState_motor = MotorStates.Stopped
                         postLockAction = self._onCoordinatesInitialized
                     elif self._motorState_motor == MotorStates.AbortingCoordinateInitialization:
                         debug("aborting coordinate initialization complete.")
-                        self._motorState_motor = MotorStates.InitializedSmoothMotion
+                        self._motorState_motor = MotorStates.Stopped
                         postLockAction = self._onCoordinatesInitializationAborted
                     elif self._motorState_motor == MotorStates.Moving:
                         debug("normal motion complete.")
-                        self._motorState_motor = MotorStates.Ready
+                        self._motorState_motor = MotorStates.Stopped
                         postLockAction = self._onStoppedMoving
+                    elif self._motorState_motor == MotorStates.Stopped:
+                        # sitting stil
+                        pass
                     else:
-                        warning("stopped in a non-standard state: " + repr(self._motorState_motor))
+                        warning("stopped in an unexpected state: " + repr(self._motorState_motor))
                 elif newPosition != None:
                     debug("motor changed position.")
                     self._failCount = 0
@@ -490,7 +501,9 @@ class Silverpak:
         """Produces a command list to initialize the motor from scratch."""
         initMotorSettingsProgramHeader = Commands.SetPosition + "0"
         # Position Correction + Optical Limit Switches
-        initMotorSettingsProgramFooter = Commands.SetMode + "10"
+        initMotorSettingsProgramFooter = ""
+        if self.fancy:
+            initMotorSettingsProgramFooter = Commands.SetMode + "10"
         return initMotorSettingsProgramHeader + self._generateResendInitCommandList() + initMotorSettingsProgramFooter
 
     def _generateResendInitCommandList(self):
@@ -992,33 +1005,16 @@ class MotorStates:
     """States for the motor"""
     # Serial Port is closed.
     Disconnected = "[Disconnected]"
-    # Serial Port is just open.
-    Connected = "[Connected]"
-    # Motor settings have been written to the Silverpak.
-    InitializedSettings = Connected # "[InitializedSettings]"
-    # Small movements have been issued to the Silverpak to clear initialization quirks.
-    InitializedSmoothMotion = Connected # "[InitializedSmoothMotion]"
+    # Connected and not moving
+    Stopped = "[Stopped]"
     # In the process of moving to the zero position.
     InitializingCoordinates_moveToZero = "[InitializingCoordinates_moveToZero]"
     # The "official" homing command. should complete very quickly.
     InitializingCoordinates_calibrateHome = "[InitializingCoordinates_calibrateHome]"
     # In the process of aborting coordinate initialization.
     AbortingCoordinateInitialization = "[AbortingCoordinateInitialization]"
-    # Fully initialized and stopped.
-    Ready = Connected # "[Ready]"
-    Stopped = Connected
     # In the process of moving.
     Moving = "[Moving]"
-
-    stoppedStates = (
-        
-    )
-    movingStates = (
-        InitializingCoordinates_moveToZero,
-        InitializingCoordinates_calibrateHome,
-        Moving,
-    )
-
 
 class LogLevel:
     Silence = 0
@@ -1026,7 +1022,7 @@ class LogLevel:
     Warning = 2
     Debug = 3
     Communication = 4
-logLevel = LogLevel.Debug
+logLevel = LogLevel.Warning
 def makeLogSomething(prefix, minLevel):
     def logSomething(message):
         if logLevel < minLevel:
