@@ -57,7 +57,7 @@ class Silverpak:
             return self._motorState_motor == MotorStates.Ready
     def position(self):
         return self._position
-    
+
     def __init__(self):
         self._connectionManager_motor = SilverpakConnectionManager()
         self.acceleration = self.DefaultAcceleration
@@ -75,6 +75,7 @@ class Silverpak:
         self.runningCurrent = self.DefaultRunningCurrent
         self.velocity = self.DefaultVelocity
         self._position = 0
+        self.fancy = True
         
         # Fields in the lock group: motor
         # Lock object for the lock group: motor.
@@ -485,16 +486,20 @@ class Silverpak:
 
     def _generateResendInitCommandList(self):
         """Produces a command list to set the adjustable motor settings."""
-        return Commands.SetHoldCurrent + str(self.holdingCurrent) + \
-                Commands.SetRunningCurrent + str(self.runningCurrent) + \
-                Commands.SetMotorPolarity + str(self.motorPolarity) + \
-                Commands.SetHomePolarity + str(self.homePolarity) + \
-                Commands.SetPositionCorrectionTolerance + str(self.positionCorrectionTolerance) + \
-                Commands.SetPositionCorrectionRetries + str(self.positionCorrectionRetries) + \
-                Commands.SetEncoderRatio + "1000" + \
-                Commands.SetVelocity + str(self.velocity) + \
-                Commands.SetAcceleration + str(self.acceleration) + \
-                Commands.SetEncoderRatio + str(self.encoderRatio)
+        settings = []
+        settings.append(Commands.SetHoldingCurrent + str(self.holdingCurrent))
+        settings.append(Commands.SetRunningCurrent + str(self.runningCurrent))
+        settings.append(Commands.SetMotorPolarity + str(self.motorPolarity))
+        if not self.fancy:
+            settings.append(Commands.SetHomePolarity + str(self.homePolarity))
+            settings.append(Commands.SetPositionCorrectionTolerance + str(self.positionCorrectionTolerance))
+            settings.append(Commands.SetPositionCorrectionRetries + str(self.positionCorrectionRetries))
+            settings.append(Commands.SetEncoderRatio + "1000")
+        settings.append(Commands.SetVelocity + str(self.velocity))
+        settings.append(Commands.SetAcceleration + str(self.acceleration))
+        if not self.fancy:
+            settings.append(Commands.SetEncoderRatio + str(self.encoderRatio))
+        return "".join(settings)
 
     @staticmethod
     def _invokeErrorCallback(ex):
@@ -527,8 +532,6 @@ class PortInformation:
 
 
 allDriverAddresses = "@123456789:;<=>?"
-
-__all__.append("getDriverAddress")
 def getDriverAddress(index):
     """0x0 <= index <= 0xf"""
     return allDriverAddresses[index]
@@ -758,7 +761,7 @@ DTProtocolComStopBits = serial.STOPBITS_ONE
 
 # Returns a complete message to write to the Silverpak.
 def GenerateMessage(recipient, commandList):
-    return DTProtocolTxStartStr + recipient + commandList + DTProtocolTxEndStr
+    return DTProtocolTxStartStr + getDriverAddress(recipient) + commandList + DTProtocolTxEndStr
 
 # Evaluates an RX string received from the Silverpak and returns whether the RX message is complete and valid.
 def IsRxDataComplete(rxData):
@@ -919,7 +922,7 @@ class Commands:
 
     # Setting Current
     SetRunningCurrent = "m"
-    SetHoldCurrent = "h"
+    SetHoldingCurrent = "h"
 
     # Looping and Branching
     BeginLoop = "g"

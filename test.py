@@ -9,9 +9,9 @@ done_yet = False
 
 def main():
     global motor
-    motor = silverpak.Silverpak()
+    motor = create17()
     motor.baudRate = 9600
-    motor.driverAddress = silverpak.getDriverAddress(1)
+    motor.driverAddress = 1
 
     if not motor.findAndConnect():
         sys.exit("no silverpak found")
@@ -29,6 +29,13 @@ def main():
         time.sleep(0.1)
 
     motor.dispose()
+
+def create17():
+    motor = silverpak.Silverpak()
+    motor.fancy = False
+    motor.velocity = 300000
+    motor.acceleration = 500
+    return motor
 
 def positionUpdated():
     print("position: " + str(motor.position()))

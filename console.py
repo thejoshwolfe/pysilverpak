@@ -14,7 +14,7 @@ def main(options):
     if options.baudRate != None:
         motor.baudRate = options.baudRate
     if options.driverAddress != None:
-        motor.driverAddress = silverpak.getDriverAddress(options.driverAddress)
+        motor.driverAddress = options.driverAddress
 
     if not motor.findAndConnect():
         sys.exit("no silverpak found")
