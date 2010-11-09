@@ -870,7 +870,8 @@ def SearchDriverAddresses(portName, baudRate, driverAddress=Silverpak.DefaultDri
             return portInfo
     return None
 
-_nextSerialPortTime = time.time()
+_nextSerialPortTimes_lock = threading.RLock()
+_nextSerialPortTimes = {}
 def GetSilverpakPortInfo(portName, baudRate, driverAddress):
     """
     Searches for an available Silverpak at the specified COM port with the specified baud rate and driver address.
@@ -878,14 +879,21 @@ def GetSilverpakPortInfo(portName, baudRate, driverAddress):
     This method can raise an ArgumentOutOfRangeException or an ValueError if passed values are invalid.
     """
     sp = makeSerialPort()
-    # set SerialPort parameters and allow exceptions to bubble out
     sp.port = portName
     sp.baudrate = baudRate
 
-    # delay if this method has been called recently
-    global _nextSerialPortTime
-    time.sleep(max(0, _nextSerialPortTime - time.time()))
-    _nextSerialPortTime = time.time() + SilverpakConnectionManager.PortDelayUnit
+    # delay if this port name has been used recently by this method
+    with _nextSerialPortTimes_lock:
+        now = time.time()
+        if portName in _nextSerialPortTimes:
+            # returning to the same port as at least once before
+            sleepyTime = max(0, _nextSerialPortTimes[portName] - now)
+        else:
+            # first time using this port
+            sleepyTime = 0
+        nextTime = now + sleepyTime + SilverpakConnectionManager.PortDelayUnit
+        _nextSerialPortTimes[portName] = nextTime
+    time.sleep(sleepyTime)
 
     # test the COM port
     try:

@@ -7,7 +7,7 @@ import silverpak
 import threading
 
 verbose = True
-movementReps = 10
+movementReps = 3
 
 # for synchronization
 class Initializer:
@@ -84,7 +84,7 @@ def main():
             for _ in range(movementReps):
                 def moveAndWait(position):
                     stopped.clear()
-                    motor.moveToPosition(position)
+                    motor.goToPosition(position)
                     stopped.wait()
                 moveAndWait(motor.maxPosition)
                 moveAndWait(0)
@@ -111,7 +111,7 @@ def makeStoppedMoving(motor):
             silverpak.StoppedMovingReason.Initialized: "initialized",
             silverpak.StoppedMovingReason.InitializationAborted: "aborted",
         }[reason]
-        print(motor.id + ".position: " + str(motor.position() + "  stopped: " + message))
+        print(motor.id + ".position: " + str(motor.position()) + "  stopped: " + message)
     return stoppedMoving
 def maybeAttachVerboseHandlers(motor):
     if not verbose:
