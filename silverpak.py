@@ -1,17 +1,15 @@
 """
 module for controlling a Silverpak stepper motor over a serial port in Windows
-with python 3.
+with 32-bit python 3.
 
-Note: this module doesn't work yet.
-
-this module requires pyserial for python 3. 
+this module requires pyserial for python 3.
 pyserial-py3k-2.5-rc1.win32.exe works.
 
-supported (eventually) devices:
- - Silverpak 23CE
+supported devices:
+ - Silverpak 23CE firmware version 'Lin Engineering V6.95 10-17-07    '
    - http://www.linengineering.com/LinE/contents/stepmotors/SilverPak_23CE.aspx
    - http://www.linengineering.com/LinE/contents/stepmotors/pdf/Silverpak23C-R356Commands.pdf
- - Silverpak 17CE
+ - Silverpak 17C firmware version 'Lin Engineering 9/22/2006 v5.71'
    - http://www.linengineering.com/LinE/contents/stepmotors/SilverPak_17CE.aspx
    - http://www.linengineering.com/LinE/contents/stepmotors/pdf/Silverpak17C-256uStepping.pdf
 """
@@ -26,7 +24,7 @@ __all__ = []
 __all__.append("Silverpak")
 class Silverpak:
     """Provides an interface to a Lin Engineering Silverpak stepper motor"""
-    
+
     DefaultAcceleration = 50
     DefaultBaudRate = -1
     DefaultDriverAddress = None
@@ -559,10 +557,10 @@ class PortInformation:
         return "PortInformation({0})".format(", ".join("{0}={1}".format(*pair) for pair in self.__dict__.items()))
 
 
-allDriverAddresses = "@123456789:;<=>?"
+allDriverAddresses = list(range(0x10))
 def getDriverAddress(index):
     """0x0 <= index <= 0xf"""
-    return allDriverAddresses[index]
+    return "@123456789:;<=>?"[index]
 
 
 class PortStatuses:

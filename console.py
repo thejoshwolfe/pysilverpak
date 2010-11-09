@@ -6,15 +6,42 @@ import optparse
 
 import silverpak
 
+def create17():
+    motor = silverpak.Silverpak()
+    motor.baudRate = 9600
+    motor.driverAddress = 5
+    motor.fancy = False
+    motor.velocity = 300000
+    motor.acceleration = 500
+    motor.maxPosition = 242000 * 2
+    motor.id = "motor17"
+    return motor
+
+def create23():
+    motor = silverpak.Silverpak()
+    motor.baudRate = 9600
+    motor.driverAddress = 1
+    motor.maxPosition = 10000
+    motor.id = "motor23"
+    return motor
+
+presets = {
+    "17": create17,
+    "23": create23,
+}
+
 def main(options):
     global motor
-    motor = silverpak.Silverpak()
-    if options.portName != None:
-        motor.portName = options.portName
-    if options.baudRate != None:
-        motor.baudRate = options.baudRate
-    if options.driverAddress != None:
-        motor.driverAddress = options.driverAddress
+    if options.preset != None:
+        motor = presets[options.preset]()
+    else:
+        motor = silverpak.Silverpak()
+        if options.portName != None:
+            motor.portName = options.portName
+        if options.baudRate != None:
+            motor.baudRate = options.baudRate
+        if options.driverAddress != None:
+            motor.driverAddress = options.driverAddress
 
     if not motor.findAndConnect():
         sys.exit("no silverpak found")
@@ -47,7 +74,8 @@ def fancyConsole():
             continue
         call = not line.startswith(" ")
         if line.startswith("-"):
-            motor.sendRawCommand(line[1:])
+            result = motor.sendRawCommand(line[1:])
+            print(repr(result))
             continue
         parts = line.split(None)
         command = parts[0]
@@ -103,6 +131,7 @@ if __name__ == "__main__":
     parser.add_option("-b", "--baudRate", type=int, help="one of 9600, 19200, 38400")
     parser.add_option("-d", "--driverAddress", type=int, help="integer in the range 0-15")
     parser.add_option("-r", "--raw", action="store_true", default=False, help="raw communication mode")
+    parser.add_option("-t", "--preset", help="see the mapping 'presets' in this module")
     (options, args) = parser.parse_args()
 
     main(options)
