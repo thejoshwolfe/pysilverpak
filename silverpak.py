@@ -76,7 +76,9 @@ class Silverpak:
         self.velocity = self.DefaultVelocity
         self._position = 0
         self.fancy = True
-        
+        # for user configuration
+        self.id = None
+
         # Fields in the lock group: motor
         # Lock object for the lock group: motor.
         self._motor_lock = threading.RLock()
@@ -265,7 +267,7 @@ class Silverpak:
         cmd += Commands.GoAbsolute + "0"
         message = GenerateMessage(self.driverAddress, cmd)
         self._connectionManager_motor.write(message, 2.0)
-        
+
         # Update state
         self._motorState_motor = MotorStates.InitializingCoordinates_moveToZero
 
@@ -320,7 +322,7 @@ class Silverpak:
             if self._motorState_motor == MotorStates.Disconnected: raise InvalidSilverpakOperationException("Connection is not active.")
             if self._motorState_motor in MotorStates.moving:
                 raise InvalidSilverpakOperationException("Disconnecting while the motor is moving is not allowed.")
-            
+
             # disconnect
             self._connectionManager_motor.disconnect()
             # Update state
@@ -340,6 +342,10 @@ class Silverpak:
     def _onStoppedMoving(self):
         self._notify(self.stoppedMovingHandlers, StoppedMovingReason.Normal)
 
+    def __enter__(self):
+        return self
+    def __exit__(self, *_):
+        self.dispose()
     def dispose(self):
         """cleans up and shuts down. it is always safe to call this method"""
         with self._motor_lock:
