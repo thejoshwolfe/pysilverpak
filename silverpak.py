@@ -16,6 +16,7 @@ supported devices:
 
 import sys
 import time, threading
+
 import serial
 
 
@@ -51,9 +52,13 @@ class Silverpak:
             return self._motorState_motor != MotorStates.Disconnected
     def isReady(self):
         """whether the motor is ready to accept a command. i.e. connected and stopped."""
+        if self._fake:
+            return not self._fake_moving
         with self._motor_lock:
             return self._motorState_motor == MotorStates.Stopped
     def position(self):
+        if self._fake:
+            return self._fake_position
         return self._position
 
     def __init__(self):
@@ -76,6 +81,7 @@ class Silverpak:
         self.fancy = True
         # for user configuration
         self.id = None
+        self._fake = False
 
         # Fields in the lock group: motor
         # Lock object for the lock group: motor.
@@ -84,7 +90,7 @@ class Silverpak:
         self._connectionManager_motor = SilverpakConnectionManager()
         # The present state of the motor. Part of the lock group: motor.
         self._motorState_motor = MotorStates.Disconnected
-        
+
         # Fields in the lock group: posUpd
         # Lock object for the lock group: posUpd.
         self._posUpd_lock = threading.RLock()
@@ -92,18 +98,26 @@ class Silverpak:
         self._keepPositionUpdaterRunning_posUpd = False
         # Thread that periodically gets the position of the motor. Part of the lock group: posUpd.
         self._positionUpdaterThread_posUpd = None
-        
+
         # called when the connection to the Silverpak is lost.
         self.connectionLostHandlers = []
         # called when the motor stops moving.
         self.stoppedMovingHandlers = []
         # called when the motor's position changes. Read the Position property to get the position.
         self.positionChangedHandlers = []
-        
+
         self._homeCalibrationSteps = 0
         # track the number of times we didn't receive a valid response
         self._failCount = 0
-    
+
+    def setFake(self, speed=1234):
+        self._fake = True
+        self._fake_position = 0
+        self._fake_destination = 0
+        self._fake_stopTheMotor = False
+        self._fake_moving = False
+        self._fake_speed = speed
+
     # Public methods
     def connect(self):
         """
@@ -112,6 +126,8 @@ class Silverpak:
         To auto-detect these properties, see findAndConnect(). 
         The isActive property must return False when calling this method or an InvalidSilverpakOperationException will be raised.
         """
+        if self._fake:
+            return True
         with self._motor_lock:
             # Validate state and connection properties
             if self._motorState_motor != MotorStates.Disconnected: raise InvalidSilverpakOperationException("Connection is already active.")
@@ -139,10 +155,12 @@ class Silverpak:
         After a successful connection, these properties will be set to their discovered values. 
         The isActive property must return False when calling this method or an InvalidSilverpakOperationException will be raised.
         """
+        if self._fake:
+            return True
         with self._motor_lock:
             # Validate state
-            if self._motorState_motor != MotorStates.Disconnected: raise InvalidSilverpakOperationException("Connection is already active. Make sure the isActive property returns False before calling this method.")
-            
+            if self._motorState_motor != MotorStates.Disconnected: raise InvalidSilverpakOperationException("Connection is already active")
+
             # Get information for all COM ports being searched
             portInfos = SearchComPorts(self.portName, self.baudRate, self.driverAddress)
             # Search the list of information for an available Silverpak
@@ -185,6 +203,8 @@ class Silverpak:
         The next step is initializeSmoothMotion().
         Calling this method out of order will raise an InvalidSilverpakOperationException.
         """
+        if self._fake:
+            return
         with self._motor_lock:
             # Validate state
             self._checkStopped()
@@ -208,6 +228,8 @@ class Silverpak:
         This method does not cause the motor to move.
         Calling this method will raise an InvalidSilverpakOperationException if the isActive property returns False or if the motor is moving.
         """
+        if self._fake:
+            return
         with self._motor_lock:
             # Validate state
             self._checkStopped()
@@ -222,6 +244,8 @@ class Silverpak:
         The next step is initializeCoordinates().
         Calling this method out of order will raise an InvalidSilverpakOperationException.
         """
+        if self._fake:
+            return
         with self._motor_lock:
             # Validate state
             self._checkStopped()
@@ -240,6 +264,14 @@ class Silverpak:
         The next initialization step is to wait for the CoordinatesInitialized event or to wait for the IsReady property to return True.
         Calling this method out of order will raise an InvalidSilverpakOperationException.
         """
+        if self._fake:
+            def waitAndNotify():
+                # raise completed event after 1 second
+                time.sleep(1)
+                self._onPositionChanged()
+                self._onCoordinatesInitialized()
+            threading.Thread(target=waitAndNotify, name="init notifier").start()
+            return
         with self._motor_lock:
             # Validate state
             self._checkStopped()
@@ -281,6 +313,9 @@ class Silverpak:
         Stops the motor.
         Calling this method when the isActive property returns False will raise an InvalidSilverpakOperationException.
         """
+        if self._fake:
+            self._fake_stopTheMotor = True
+            return
         with self._motor_lock:
             # Validate state
             self_checkConnected()
@@ -300,6 +335,42 @@ class Silverpak:
         Sends the motor to the passed position.
         Calling this method before the motor has been fully initialized will raise an InvalidSilverpakOperationException.
         """
+        if self._fake:
+            self._fake_destination = position
+            def animate():
+                def sign(number):
+                    if number > 0:
+                        return 1
+                    if number < 0:
+                        return -1
+                    return 0
+                direction = sign(self._fake_destination - self._fake_position)
+                if direction == 0:
+                    return
+                velocity = direction * self._fake_speed
+                almost_there_position = self._fake_destination - velocity
+
+                # here we go
+                self._fake_stopTheMotor = False
+                self._fake_moving = True
+                try:
+                    while direction * self._fake_position < direction * almost_there_position:
+                        if self._fake_stopTheMotor:
+                            return
+                        self._fake_position += velocity
+                        self._onPositionChanged()
+                        time.sleep(0.05)
+                    # close enough. snap to destination
+                    self._fake_position = self._fake_destination
+                    self._onPositionChanged()
+                    time.sleep(0.05)
+                finally:
+                    self._fake_moving = False
+                    self._onStoppedMoving()
+            # spawn a thread for animation
+            threading.Thread(target=animate, name="position animator").start()
+            return
+        # real method
         with self._motor_lock:
             # Validate state
             if self._motorState_motor not in (MotorStates.Stopped, MotorStates.Moving):
@@ -314,6 +385,8 @@ class Silverpak:
         Terminates the connection to the Silverpak and closes the COM port.
         Calling this method will raise an InvalidSilverpakOperationException if the isActive property returns False or if the motor is moving.
         """
+        if self._fake:
+            return
         with self._motor_lock:
             # Validate state
             self._checkConnected()

@@ -68,6 +68,9 @@ if __name__ == "__main__":
         motor = create23()
     elif args[0] == "17":
         motor = create17()
+    elif args[0] == "fake":
+        motor = create23()
+        motor.setFake()
     else:
         sys.exit("usage: (17|23)")
     try:
