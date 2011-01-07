@@ -484,7 +484,6 @@ class Silverpak:
         try:
             with self._motor_lock:
                 getPositionMessage = GenerateMessage(self.driverAddress, Commands.QueryMotorPosition)
-                # make sure we know whether it's been set by starting it at an unlikely value
                 newPosition = None
                 response = None
                 try:
