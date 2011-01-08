@@ -22,6 +22,13 @@ import serial
 
 __all__ = []
 
+__all__.append("make_thread")
+def make_thread(target, name, args=[]):
+    """
+    overwrite this method with your own if you want
+    """
+    return threading.Thread(target=target, name=name, args=args)
+
 __all__.append("Silverpak")
 class Silverpak:
     """Provides an interface to a Lin Engineering Silverpak stepper motor"""
@@ -249,9 +256,10 @@ class Silverpak:
             # Validate state
             self._checkStopped()
 
-            # Send a small motion command
+            # Send a small motion command 5 times
             smoothMotionInitMsg = GenerateMessage(self.driverAddress, Commands.GoPositive + "40")
-            self._connectionManager_motor.write(smoothMotionInitMsg, 3.0)
+            for _ in range(5):
+                self._connectionManager_motor.write(smoothMotionInitMsg, 3.0)
             # Update state
             self._motorState_motor = MotorStates.Stopped
     def initializeCoordinates(self):
@@ -268,7 +276,7 @@ class Silverpak:
                 time.sleep(1)
                 self._onPositionChanged()
                 self._onCoordinatesInitialized()
-            threading.Thread(target=waitAndNotify, name="init notifier").start()
+            make_thread(waitAndNotify, "init notifier").start()
             return
         with self._motor_lock:
             # Validate state
@@ -366,7 +374,7 @@ class Silverpak:
                     self._fake_moving = False
                     self._onStoppedMoving()
             # spawn a thread for animation
-            threading.Thread(target=animate, name="position animator").start()
+            make_thread(animate, "position animator").start()
             return
         # real method
         with self._motor_lock:
@@ -434,7 +442,7 @@ class Silverpak:
         with self._posUpd_lock:
             self._keepPositionUpdaterRunning_posUpd = True # make sure the position updater thread doesn't cancel
             if self._positionUpdaterThread_posUpd == None: # only activate it when it's not active
-                self._positionUpdaterThread_posUpd = threading.Thread(target=self._positionUpdater_run)
+                self._positionUpdaterThread_posUpd = make_thread(self._positionUpdater_run, None)
                 self._positionUpdaterThread_posUpd.daemon = True
                 self._positionUpdaterThread_posUpd.start()
 
@@ -446,7 +454,7 @@ class Silverpak:
             if threading.current_thread() ==  self._positionUpdaterThread_posUpd:
                 # the position updater thread cannot stop itself; a thread can never see itself die.
                 # stop the position updater thread on a seperate thread.
-                threading.Thread(target=self._stopPositionUpdater_not_positionUpdaterThread).start()
+                make_thread(self._stopPositionUpdater_not_positionUpdaterThread, None).start()
             else:
                 self._stopPositionUpdater_not_positionUpdaterThread()
     def _stopPositionUpdater_not_positionUpdaterThread(self):
