@@ -78,9 +78,8 @@ class Silverpak:
         self.runningCurrent = self.DefaultRunningCurrent
         self.velocity = self.DefaultVelocity
         self._position = 0
-        self.fancy = True
-        # for user configuration
-        self.id = None
+        self.enableLimitSwitches = True
+        self.enablePositionCorrection = True
         self._fake = False
 
         # Fields in the lock group: motor
@@ -250,10 +249,9 @@ class Silverpak:
             # Validate state
             self._checkStopped()
 
-            # Send a small motion command five times
-            smoothMotionInitMsg = GenerateMessage(self.driverAddress, Commands.GoPositive + "1")
-            for _ in range(5):
-                self._connectionManager_motor.write(smoothMotionInitMsg, 3.0)
+            # Send a small motion command
+            smoothMotionInitMsg = GenerateMessage(self.driverAddress, Commands.GoPositive + "40")
+            self._connectionManager_motor.write(smoothMotionInitMsg, 3.0)
             # Update state
             self._motorState_motor = MotorStates.Stopped
     def initializeCoordinates(self):
@@ -275,7 +273,7 @@ class Silverpak:
         with self._motor_lock:
             # Validate state
             self._checkStopped()
-            if self.fancy:
+            if self.enableLimitSwitches:
                 self._moveToZero()
             else:
                 # don't go anywhere. assumer here is 0.
@@ -283,7 +281,7 @@ class Silverpak:
                 message = GenerateMessage(self.driverAddress, cmd)
                 # get a response to clear the read buffer
                 self._connectionManager_motor.writeAndGetResponse(message, 1.0)
-        if not self.fancy:
+        if not self.enableLimitSwitches:
             # no stopping to trigger this, so call it now.
             self._onCoordinatesInitialized()
         # Now that the motor is moving, begin listening for position changes
@@ -292,7 +290,7 @@ class Silverpak:
     def _moveToZero(self):
         # move to zero in preparation for home calibration
         cmd = Commands.SetPosition + str(int(self.maxPosition * (self.encoderRatio / 1000.0)))
-        if self.fancy:
+        if self.enablePositionCorrection:
             cmd += Commands.SetEncoderRatio + str(self.encoderRatio)
         cmd += Commands.GoAbsolute + "0"
         message = GenerateMessage(self.driverAddress, cmd)
@@ -576,10 +574,12 @@ class Silverpak:
     def _generateFullInitCommandList(self):
         """Produces a command list to initialize the motor from scratch."""
         initMotorSettingsProgramHeader = Commands.SetPosition + "0"
-        # Position Correction + Optical Limit Switches
-        initMotorSettingsProgramFooter = ""
-        if self.fancy:
-            initMotorSettingsProgramFooter = Commands.SetMode + "10"
+        mode = 0
+        if self.enableLimitSwitches:
+            mode |= 2
+        if self.enablePositionCorrection:
+            mode |= 8
+        initMotorSettingsProgramFooter = Commands.SetMode + str(mode)
         return initMotorSettingsProgramHeader + self._generateResendInitCommandList() + initMotorSettingsProgramFooter
 
     def _generateResendInitCommandList(self):
@@ -588,14 +588,15 @@ class Silverpak:
         settings.append(Commands.SetHoldingCurrent + str(self.holdingCurrent))
         settings.append(Commands.SetRunningCurrent + str(self.runningCurrent))
         settings.append(Commands.SetMotorPolarity + str(self.motorPolarity))
-        if self.fancy:
+        if self.enableLimitSwitches:
             settings.append(Commands.SetHomePolarity + str(self.homePolarity))
+        if self.enablePositionCorrection:
             settings.append(Commands.SetPositionCorrectionTolerance + str(self.positionCorrectionTolerance))
             settings.append(Commands.SetPositionCorrectionRetries + str(self.positionCorrectionRetries))
             settings.append(Commands.SetEncoderRatio + "1000")
         settings.append(Commands.SetVelocity + str(self.velocity))
         settings.append(Commands.SetAcceleration + str(self.acceleration))
-        if self.fancy:
+        if self.enablePositionCorrection:
             settings.append(Commands.SetEncoderRatio + str(self.encoderRatio))
         return "".join(settings)
 
