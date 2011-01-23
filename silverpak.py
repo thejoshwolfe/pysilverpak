@@ -593,7 +593,8 @@ class Silverpak:
     def _generateResendInitCommandList(self):
         """Produces a command list to set the adjustable motor settings."""
         settings = []
-        settings.append(Commands.SetHoldingCurrent + str(self.holdingCurrent))
+        if self.holdingCurrent != None:
+            settings.append(Commands.SetHoldingCurrent + str(self.holdingCurrent))
         settings.append(Commands.SetRunningCurrent + str(self.runningCurrent))
         settings.append(Commands.SetMotorPolarity + str(self.motorPolarity))
         if self.enableLimitSwitches:
